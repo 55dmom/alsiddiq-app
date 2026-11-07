@@ -111,6 +111,6 @@ object DemoSeed {
         )
         val hashes = mapOf(admin.id to h(ADMIN_PASSWORD), viewer.id to h(VIEWER_PASSWORD),
             t1.id to h(TEACHER_PASSWORD), t2.id to h("333332"), t3.id to h("333333"))
-        return DemoStore(data, hashes, null, VERSION)
+        return DemoStore(data, hashes, null, null, VERSION)
     }
 }

@@ -121,45 +121,7 @@ fun RewardsScreen(user: Member, nav: NavHostController, onBack: (() -> Unit)?) {
     var giving by remember { mutableStateOf<Student?>(null) }
     var pickStudent by remember { mutableStateOf(false) }
     ScreenList("المكافآت", onBack = onBack, fab = { if (canGive) AddFab("منح مكافأة") { pickStudent = true } }) {
-        if (false) {
-            visible.forEach { s ->
-                item(key = "card" + s.id) {
-                    val st = remember(s, snap) { Stats.forStudent(s, snap) }
-                    AppCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(56.dp).clip(CircleShape).background(Brand.GoldSoft), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.EmojiEvents, null, tint = Brand.Gold, modifier = Modifier.size(32.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(s.fullName, style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-                                Text("${st.points} نقطة", style = MaterialTheme.typography.headlineSmall, color = Brand.Ink)
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Text("الأوسمة", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(8.dp))
-                        val badges = badgesFor(st)
-                        badges.chunked(3).forEach { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                row.forEach { b ->
-                                    Column(
-                                        Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
-                                            .background(if (b.earned) Brand.NavySoft else Brand.Bg).padding(10.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Icon(b.icon, null, tint = if (b.earned) Brand.Navy else Brand.Line, modifier = Modifier.size(28.dp))
-                                        Text(b.title, style = MaterialTheme.typography.labelSmall, color = if (b.earned) Brand.Navy else Brand.Muted, textAlign = TextAlign.Center)
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                }
-            }
-            item { SectionHeader("سجل النقاط") }
-        } else {
+        run {
             item { SectionHeader("لوحة الشرف") }
             val board = visible.map { s -> s to snap.rewards.filter { it.studentId == s.id }.sumOf { it.points } }.sortedByDescending { it.second }.take(10)
             items(board, key = { "b" + it.first.id }) { (s, pts) ->
