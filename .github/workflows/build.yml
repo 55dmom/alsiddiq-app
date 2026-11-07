@@ -37,19 +37,33 @@ jobs:
           mkdir -p out
           gradle :app:assembleDebug -PBUILD_NUMBER=${{ github.run_number }} --stacktrace 2>&1 | tee build-demo.log
           code=${PIPESTATUS[0]}; cp app/build/outputs/apk/debug/*.apk out/AlSiddiq-demo-${{ github.run_number }}.apk || true; exit $code
-      - name: Assemble APK connected to the central database
+      - name: Assemble check APK (debug, real database, only for the manual live check)
+        if: ${{ inputs.live_check }}
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: |
           gradle :app:assembleDebug -PBUILD_NUMBER=${{ github.run_number }} \
+            -PSUPABASE_URL="$SUPABASE_URL" -PSUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" --stacktrace 2>&1 | tee build-check.log
+          code=${PIPESTATUS[0]}; cp app/build/outputs/apk/debug/*.apk out/AlSiddiq-check-${{ github.run_number }}.apk || true; exit $code
+      - name: Assemble signed release APK connected to the central database
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          export KEYSTORE_FILE="$RUNNER_TEMP/release.p12"
+          gradle :app:assembleRelease -PBUILD_NUMBER=${{ github.run_number }} \
             -PSUPABASE_URL="$SUPABASE_URL" -PSUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" --stacktrace 2>&1 | tee build.log
-          exit ${PIPESTATUS[0]}
+          code=${PIPESTATUS[0]}; rm -f "$RUNNER_TEMP/release.p12"; exit $code
       - name: Collect
         if: always()
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/*.apk out/AlSiddiq-${{ github.run_number }}.apk || true
+          cp app/build/outputs/apk/release/*.apk out/AlSiddiq-${{ github.run_number }}.apk || true
+          ls app/build/outputs/apk/release/ || true
           grep -E "^e: |error:|FAILURE|BUILD SUCCESSFUL|BUILD FAILED" build-demo.log build.log test.log > out/errors.txt 2>/dev/null || true
           cp build-demo.log build.log test.log out/ 2>/dev/null || true
           ls -la out
@@ -83,7 +97,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk && if [ "${{ inputs.live_check }}" = "true" ]; then bash ci/cloud_check.sh out/AlSiddiq-${{ github.run_number }}.apk; fi
+          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk && if [ "${{ inputs.live_check }}" = "true" ]; then bash ci/cloud_check.sh out/AlSiddiq-check-${{ github.run_number }}.apk; fi
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
@@ -114,4 +128,4 @@ jobs:
           fi
           gh release create "$TAG" $FILES --repo "${{ github.repository }}" \
             --title "مركز الصديق — build ${{ github.run_number }}" \
-            --notes "AlSiddiq-N.apk = the real app connected to the central database. AlSiddiq-demo-N.apk = preview with sample data on the phone only. Commit ${{ github.sha }}." --prerelease
+            --notes "AlSiddiq-N.apk = the real app (signed release, connected to the central database). AlSiddiq-demo-N.apk = preview with sample data on the phone only. Commit ${{ github.sha }}." --prerelease
