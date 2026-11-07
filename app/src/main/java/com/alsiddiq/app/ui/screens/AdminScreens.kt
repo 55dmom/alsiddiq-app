@@ -66,7 +66,7 @@ fun AdminHome(user: Member, nav: NavHostController) {
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                if (demo) { Spacer(Modifier.height(12.dp)); DemoBanner() }
+                StatusBanners(Modifier.padding(top = 12.dp))
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatTile("الطلاب", "${stats.students}", Icons.Outlined.School, Brand.Navy, Modifier.weight(1f), onClick = { nav.navigate("students") })
@@ -401,10 +401,21 @@ fun AboutScreen(nav: NavHostController) {
                 }
                 Spacer(Modifier.height(12.dp))
                 KeyValueRow("مصدر البيانات", if (demo) "تجريبي (على الجهاز)" else "قاعدة البيانات المركزية")
-                KeyValueRow("المزامنة", if (demo) "غير مفعّلة بعد" else "مفعّلة")
+                val sync = container.center.syncState.collectAsStateWithLifecycle().value
+                KeyValueRow("المزامنة", when {
+                    demo -> "غير مفعّلة (وضع تجريبي)"
+                    sync is com.alsiddiq.app.data.SyncState.Pending -> "${sync.count} تعديل بانتظار الاتصال"
+                    else -> "متزامن مع الخادم"
+                })
                 KeyValueRow("الخادم مُعدّ", if (container.cloudConfigured) "نعم" else "لا")
             }
         }
-        if (demo) item { DemoBanner() }
+        item { StatusBanners() }
+        if (!demo) item {
+            val actions = rememberActions()
+            OutlinedButton(onClick = { actions.run("تمت المزامنة", { container.center.refresh() }) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                Icon(Icons.Outlined.Sync, null); Spacer(Modifier.width(6.dp)); Text("مزامنة الآن")
+            }
+        }
     }
 }

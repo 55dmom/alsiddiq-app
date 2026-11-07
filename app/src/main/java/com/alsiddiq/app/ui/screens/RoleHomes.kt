@@ -66,7 +66,7 @@ fun TeacherHome(user: Member, nav: NavHostController) {
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                if (demo) { Spacer(Modifier.height(12.dp)); DemoBanner() }
+                StatusBanners(Modifier.padding(top = 12.dp))
                 Spacer(Modifier.height(12.dp))
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -120,7 +120,7 @@ fun StudentHome(user: Member, nav: NavHostController) {
         item {
             HomeHeader("السلام عليكم", user.fullName, "«خيركم من تعلّم القرآن وعلّمه»", snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }
-        if (demo) item { Box(Modifier.padding(horizontal = 16.dp)) { DemoBanner() } }
+        item { Box(Modifier.padding(horizontal = 16.dp)) { StatusBanners() } }
         if (s == null) item { EmptyState("الحساب غير مرتبط بسجل طالب", "تواصل مع إدارة المركز") }
         else {
             // Same dashboard the teacher and parent see, with side padding.
@@ -141,7 +141,7 @@ fun ParentHome(user: Member, nav: NavHostController) {
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                if (demo) { Spacer(Modifier.height(12.dp)); DemoBanner() }
+                StatusBanners(Modifier.padding(top = 12.dp))
                 SectionHeader("أبنائي")
                 if (kids.isEmpty()) EmptyState("لا يوجد أبناء مرتبطون", "تواصل مع إدارة المركز لربط حسابك بأبنائك")
             }

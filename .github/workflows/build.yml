@@ -27,7 +27,12 @@ jobs:
           gradle-version: "8.9"
       - name: Unit tests
         run: gradle :app:testDebugUnitTest -PBUILD_NUMBER=${{ github.run_number }} --stacktrace 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
-      - name: Assemble debug APK
+      - name: Assemble demo APK (sample data, used for screenshots)
+        run: |
+          mkdir -p out
+          gradle :app:assembleDebug -PBUILD_NUMBER=${{ github.run_number }} --stacktrace 2>&1 | tee build-demo.log
+          code=${PIPESTATUS[0]}; cp app/build/outputs/apk/debug/*.apk out/AlSiddiq-demo-${{ github.run_number }}.apk || true; exit $code
+      - name: Assemble APK connected to the central database
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
@@ -39,9 +44,9 @@ jobs:
         if: always()
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/*.apk out/AlSiddiq-debug-${{ github.run_number }}.apk || true
-          grep -E "^e: |error:|FAILURE|BUILD SUCCESSFUL|BUILD FAILED" build.log test.log > out/errors.txt 2>/dev/null || true
-          cp build.log test.log out/ 2>/dev/null || true
+          cp app/build/outputs/apk/debug/*.apk out/AlSiddiq-${{ github.run_number }}.apk || true
+          grep -E "^e: |error:|FAILURE|BUILD SUCCESSFUL|BUILD FAILED" build-demo.log build.log test.log > out/errors.txt 2>/dev/null || true
+          cp build-demo.log build.log test.log out/ 2>/dev/null || true
           ls -la out
       - uses: actions/upload-artifact@v4
         if: always()
@@ -73,7 +78,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash ci/shots.sh out/AlSiddiq-debug-${{ github.run_number }}.apk
+          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -94,11 +99,11 @@ jobs:
         run: |
           ls -R art | head -60
           TAG=build-${{ github.run_number }}
-          FILES="art/apk/AlSiddiq-debug-${{ github.run_number }}.apk"
+          FILES="art/apk/AlSiddiq-${{ github.run_number }}.apk art/apk/AlSiddiq-demo-${{ github.run_number }}.apk"
           if [ -d art/screenshots ]; then
             cd art/screenshots && zip -q ../../screenshots.zip *.png && cd ../..
             FILES="$FILES screenshots.zip $(ls art/screenshots/*.png | tr '\n' ' ')"
           fi
           gh release create "$TAG" $FILES --repo "${{ github.repository }}" \
             --title "مركز الصديق — build ${{ github.run_number }}" \
-            --notes "Debug APK (demo data, local only — not yet connected to the central database). Commit ${{ github.sha }}." --prerelease
+            --notes "AlSiddiq-N.apk = the real app connected to the central database. AlSiddiq-demo-N.apk = preview with sample data on the phone only. Commit ${{ github.sha }}." --prerelease

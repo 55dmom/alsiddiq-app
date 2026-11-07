@@ -132,11 +132,24 @@ private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: Str
     val unread = LocalContainer.current.center.snapshot.collectAsStateWithLifecycle().value
         .notifications.count { !it.read }
 
+    // Debug-only: CI opens a given screen for screenshots. Retries until the navigation graph is ready.
     LaunchedEffect(startRoute) {
         if (!startRoute.isNullOrBlank() && startRoute != "home") {
-            delay(300)
-            runCatching { nav.navigate(startRoute) }
+            for (attempt in 0 until 20) {
+                delay(400)
+                if (runCatching { nav.navigate(startRoute) }.isSuccess) break
+            }
         }
+    }
+    val container = LocalContainer.current
+    // Fresh data from the central database as soon as the main screen opens.
+    LaunchedEffect(user.id) { runCatching { container.center.refresh() } }
+    // Android 13+: ask once for permission to show notifications (absence, new hifz, announcements).
+    if (container.cloudConfigured && android.os.Build.VERSION.SDK_INT >= 33) {
+        val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { }
+        LaunchedEffect(Unit) { launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
     }
 
     com.alsiddiq.app.ui.components.StatusBarIcons(lightIcons = current == "home")

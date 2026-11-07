@@ -256,3 +256,21 @@ fun SelectorField(label: String, value: String, modifier: Modifier = Modifier, o
         }
     }
 }
+
+/** Demo notice, or — with the central database — how many saved changes are still waiting for a connection. */
+@Composable
+fun StatusBanners(modifier: Modifier = Modifier) {
+    val container = LocalContainer.current
+    if (container.auth.mode == BackendMode.DEMO) { Box(modifier) { DemoBanner() }; return }
+    val sync = container.center.syncState.collectAsStateWithLifecycle().value
+    if (sync is com.alsiddiq.app.data.SyncState.Pending) {
+        Row(
+            modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Brand.NavySoft).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.CloudUpload, null, tint = Brand.Navy, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("${sync.count} تعديل محفوظ على الجهاز وسيُرفع تلقائياً عند توفر الإنترنت", style = MaterialTheme.typography.labelMedium, color = Brand.Navy)
+        }
+    }
+}

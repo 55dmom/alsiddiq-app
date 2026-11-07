@@ -15,7 +15,7 @@ launch() { # role route
 }
 shot() { # name role route wait
   launch "$2" "$3"
-  sleep "${4:-7}"
+  sleep "${4:-10}"
   adb exec-out screencap -p > "shots/$1.png"
   adb logcat -d -s AndroidRuntime:E | tail -40 > "shots/$1.crash.txt"
   [ -s "shots/$1.crash.txt" ] || rm -f "shots/$1.crash.txt"
@@ -23,8 +23,8 @@ shot() { # name role route wait
 }
 
 adb logcat -c
-shot 00_login "" "" 9
-shot 01_admin_home admin home 9
+shot 00_login "" "" 14
+shot 01_admin_home admin home 14
 shot 02_admin_circles admin circles
 shot 03_admin_students admin students
 shot 04_admin_reports admin reports

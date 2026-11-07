@@ -19,6 +19,11 @@ interface AuthRepository {
     suspend fun signIn(login: String, password: String): Result<Member>
     suspend fun signOut()
     suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit>
+
+    /** True when the central database has no accounts yet (first-time setup). Null = unknown (offline). */
+    suspend fun needsSetup(): Boolean? = false
+    suspend fun bootstrap(centerName: String, fullName: String, phone: String, password: String): Result<Member> =
+        Result.failure(UnsupportedOperationException())
 }
 
 data class NewMember(
