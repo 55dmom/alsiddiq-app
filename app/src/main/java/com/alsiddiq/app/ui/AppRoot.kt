@@ -69,10 +69,10 @@ fun tabsFor(role: Role): List<TabItem> = when (role) {
 }
 
 @Composable
-fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?) {
+fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ciLogin: Pair<String, String>? = null, selfTest: Boolean = false) {
     val user by container.auth.currentUser.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    var splash by remember { mutableStateOf(autoLogin == null) }
+    var splash by remember { mutableStateOf(autoLogin == null && ciLogin == null) }
     LaunchedEffect(Unit) { delay(900); splash = false }
 
     LaunchedEffect(autoLogin) {
@@ -85,6 +85,10 @@ fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?) {
         }
         if (phone != null && container.auth.currentUser.value?.phone != phone) {
             container.auth.signIn(phone, DemoSeed.DEMO_PASSWORD)
+        }
+        if (ciLogin != null) {
+            val r = container.auth.signIn(ciLogin.first, ciLogin.second)
+            android.util.Log.i("ALSIDDIQ_SELFTEST", "login " + (if (r.isSuccess) "ok role=" + r.getOrNull()?.role else "fail " + r.exceptionOrNull()?.message))
         }
     }
 
@@ -105,7 +109,7 @@ fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?) {
                 state == "login" -> Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0), snackbarHost = { SnackbarHost(snackbar) }) { pad ->
                     Box(Modifier.padding(pad)) { LoginScreen() }
                 }
-                else -> user?.let { MainShell(it, snackbar, if (autoLogin != null) startRoute else null) }
+                else -> user?.let { MainShell(it, snackbar, if (autoLogin != null || ciLogin != null) startRoute else null, selfTest) }
             }
         }
     }
@@ -123,7 +127,7 @@ private fun Splash() {
 }
 
 @Composable
-private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: String?) {
+private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: String?, selfTest: Boolean = false) {
     val nav = rememberNavController()
     val tabs = remember(user.role) { tabsFor(user.role) }
     val entry by nav.currentBackStackEntryAsState()
@@ -144,6 +148,8 @@ private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: Str
     val container = LocalContainer.current
     // Fresh data from the central database as soon as the main screen opens.
     LaunchedEffect(user.id) { runCatching { container.center.refresh() } }
+    // Debug-only end-to-end check used by CI against the real database.
+    if (selfTest) LaunchedEffect(user.id) { com.alsiddiq.app.ui.SelfTest.run(container, user) }
     // Android 13+: ask once for permission to show notifications (absence, new hifz, announcements).
     if (container.cloudConfigured && android.os.Build.VERSION.SDK_INT >= 33) {
         val launcher = androidx.activity.compose.rememberLauncherForActivityResult(

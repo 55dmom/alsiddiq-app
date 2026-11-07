@@ -78,7 +78,10 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk
+          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk && bash ci/cloud_check.sh out/AlSiddiq-${{ github.run_number }}.apk
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -101,8 +104,8 @@ jobs:
           TAG=build-${{ github.run_number }}
           FILES="art/apk/AlSiddiq-${{ github.run_number }}.apk art/apk/AlSiddiq-demo-${{ github.run_number }}.apk"
           if [ -d art/screenshots ]; then
-            cd art/screenshots && zip -q ../../screenshots.zip *.png && cd ../..
-            FILES="$FILES screenshots.zip $(ls art/screenshots/*.png | tr '\n' ' ')"
+            cd art/screenshots && zip -q ../../screenshots.zip * && cd ../..
+            FILES="$FILES screenshots.zip $(ls art/screenshots/*.png | tr '\n' ' ') $(ls art/screenshots/*.txt 2>/dev/null | tr '\n' ' ')"
           fi
           gh release create "$TAG" $FILES --repo "${{ github.repository }}" \
             --title "مركز الصديق — build ${{ github.run_number }}" \
