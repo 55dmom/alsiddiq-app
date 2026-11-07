@@ -8,6 +8,9 @@ mkdir -p shots
 adb wait-for-device
 adb shell settings put global window_animation_scale 0
 adb install -r "$APK" || exit 1
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell settings put secure anr_show_background 0 || true
+nodlg() { adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1; }
 
 launch() { # role route
   adb shell am force-stop $PKG
@@ -16,6 +19,7 @@ launch() { # role route
 shot() { # name role route wait
   launch "$2" "$3"
   sleep "${4:-10}"
+  nodlg; sleep 1
   adb exec-out screencap -p > "shots/$1.png"
   adb logcat -d -s AndroidRuntime:E | tail -40 > "shots/$1.crash.txt"
   [ -s "shots/$1.crash.txt" ] || rm -f "shots/$1.crash.txt"
@@ -24,7 +28,7 @@ shot() { # name role route wait
 
 adb logcat -c
 shot 00_password gate "" 14
-adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT; sleep 0.9; adb exec-out screencap -p > shots/00b_splash.png; sleep 8
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT; sleep 0.8; adb exec-out screencap -p > shots/00b_splash.png; sleep 8
 shot 01_viewer_home viewer home 14
 shot 02_viewer_settings viewer viewer_settings
 shot 03_role_login_admin viewer role_login/ADMIN

@@ -13,6 +13,9 @@ mkdir -p shots
 LOG=shots/cloud_selftest.txt
 adb uninstall $PKG >/dev/null 2>&1
 adb install -r "$APK" || exit 1
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell settings put secure anr_show_background 0 || true
+nodlg() { adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1; }
 adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
 
@@ -21,7 +24,7 @@ rest() { curl -s -X POST "$U/rest/v1/$1" -H "apikey: $K" -H "Authorization: Bear
 get() { curl -s "$U/rest/v1/$1" -H "apikey: $K" -H "Authorization: Bearer $2"; echo; }
 jget() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)"; }
 uid() { python3 -c 'import uuid;print(uuid.uuid4())'; }
-shot() { adb exec-out screencap -p > "shots/$1.png"; }
+shot() { nodlg; sleep 1; adb exec-out screencap -p > "shots/$1.png"; }
 app() { adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT "$@"; }
 
 ST=$(fn '{"action":"status"}'); echo "$ST"
@@ -42,7 +45,7 @@ fn "{\"action\":\"teacher_save\",\"name\":\"TEST معلم أ\",\"circle_id\":\"$
 fn "{\"action\":\"teacher_save\",\"name\":\"TEST معلم ب\",\"circle_id\":\"$C2\",\"password\":\"$TB\"}" "$AT" | tee -a $LOG
 
 # 2) The real password screen: type the general password with the keyboard and press Enter
-app; sleep 14; shot 21_cloud_password_screen
+app; sleep 14; nodlg; sleep 1; shot 21_cloud_password_screen
 B=$(adb exec-out uiautomator dump /dev/tty 2>/dev/null | python3 -c '
 import sys,re
 x=sys.stdin.read(); m=re.search(r"class=\"android.widget.EditText\"[^>]*bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"",x)
