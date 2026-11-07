@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      live_check:
+        description: "Run the end-to-end check against the real database (ONLY while it is empty, before the owner's first setup)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -78,7 +83,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk && bash ci/cloud_check.sh out/AlSiddiq-${{ github.run_number }}.apk
+          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk && if [ "${{ inputs.live_check }}" = "true" ]; then bash ci/cloud_check.sh out/AlSiddiq-${{ github.run_number }}.apk; fi
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
