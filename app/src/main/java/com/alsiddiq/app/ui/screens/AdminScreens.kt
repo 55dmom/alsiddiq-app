@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions
@@ -67,7 +66,9 @@ fun AdminHome(user: Member, nav: NavHostController) {
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 StatusBanners(Modifier.padding(top = 12.dp))
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
+                RoleStrip(user)
+                Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatTile("الطلاب", "${stats.students}", Icons.Outlined.School, Brand.Navy, Modifier.weight(1f), onClick = { nav.navigate("students") })
                     StatTile("الحلقات", "${snap.circles.size}", Icons.Outlined.Groups, Brand.Maroon, Modifier.weight(1f), onClick = { nav.navigate("circles") })
@@ -84,7 +85,7 @@ fun AdminHome(user: Member, nav: NavHostController) {
                     QuickAction("طالب جديد", Icons.Outlined.PersonAdd, Modifier.weight(1f)) { nav.navigate("student_edit/new") }
                     QuickAction("حلقة جديدة", Icons.Outlined.GroupAdd, Modifier.weight(1f)) { nav.navigate("circle_edit/new") }
                     QuickAction("تسجيل", Icons.Outlined.EditNote, Modifier.weight(1f)) { nav.navigate("record_start") }
-                    QuickAction("إعلان", Icons.Outlined.Campaign, Modifier.weight(1f)) { nav.navigate("announce_new") }
+                    QuickAction("معلم", Icons.Outlined.CoPresent, Modifier.weight(1f)) { nav.navigate("teacher_edit/new") }
                 }
 
                 SectionHeader("نشاط التسميع", "التقارير") { nav.navigate("reports") }
@@ -186,20 +187,19 @@ fun CircleCard(c: Circle, snap: CenterSnapshot, onClick: () -> Unit) {
 @Composable
 fun MoreScreen(user: Member, nav: NavHostController) {
     val snap = snapshot()
-    ScreenList("المزيد") {
-        item { SectionHeader("الحسابات") }
-        item { MenuRow("المعلمون", "${snap.teachers().size} معلم", Icons.Outlined.CoPresent) { nav.navigate("members/TEACHER") } }
-        item { MenuRow("أولياء الأمور", "${snap.parents().size} ولي أمر", Icons.Outlined.FamilyRestroom) { nav.navigate("members/PARENT") } }
-        item { MenuRow("حسابات الطلاب", "${snap.members.count { it.role == Role.STUDENT }} حساب", Icons.Outlined.Badge) { nav.navigate("members/STUDENT") } }
-        item { MenuRow("المشرفون والإدارة", "${snap.members.count { it.role == Role.ADMIN }} حساب", Icons.Outlined.AdminPanelSettings) { nav.navigate("members/ADMIN") } }
+    ScreenList("الإدارة") {
+        item { RoleStrip(user) }
+        item { SectionHeader("المعلمون وكلمات السر") }
+        item { MenuRow("المعلمون", "${snap.teachers().size} معلم • الاسم والحلقة وكلمة السر", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teachers") } }
+        item { MenuRow("كلمات السر", "العامة والإدارة", Icons.Outlined.Password) { nav.navigate("passwords") } }
         item { SectionHeader("المتابعة") }
         item { MenuRow("الحضور والغياب", "تسجيل ومراجعة الحضور", Icons.Outlined.FactCheck) { nav.navigate("attendance") } }
+        items(snap.circles.sortedBy { it.name }.take(6)) { c -> MenuRow("تقرير ${c.name}", "كم حفظوا ومن غاب", Icons.Outlined.Summarize, Brand.Gold) { nav.navigate("circle_report/${c.id}") } }
         item { MenuRow("المكافآت والنقاط", "لوحة الشرف ومنح النقاط", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
-        item { MenuRow("الإعلانات", "${snap.announcements.size} إعلان", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
+        item { MenuRow("الإعلانات والتقارير", "${snap.announcements.size} منشور", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
-        item { SectionHeader("الإعدادات") }
+        item { SectionHeader("المركز") }
         item { MenuRow("بيانات المركز", snap.center.name, Icons.Outlined.Mosque) { nav.navigate("settings") } }
-        item { MenuRow("حسابي", user.fullName, Icons.Outlined.Person) { nav.navigate("profile") } }
         item { MenuRow("عن التطبيق", "الإصدار وحالة المزامنة", Icons.Outlined.Info) { nav.navigate("about") } }
     }
 }
@@ -218,143 +218,6 @@ fun MenuRow(title: String, sub: String, icon: androidx.compose.ui.graphics.vecto
             }
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = Brand.Muted)
         }
-    }
-}
-
-@Composable
-fun MembersScreen(user: Member, nav: NavHostController, role: Role) {
-    val snap = snapshot()
-    var q by remember { mutableStateOf("") }
-    val list = snap.members.filter { it.role == role && (q.isBlank() || it.fullName.contains(q.trim()) || it.phone.contains(q.trim())) }
-    val title = when (role) { Role.TEACHER -> "المعلمون"; Role.PARENT -> "أولياء الأمور"; Role.STUDENT -> "حسابات الطلاب"; Role.ADMIN -> "الإدارة" }
-    ScreenList(title, onBack = { nav.popBackStack() }, fab = {
-        if (Permissions.canManageMembers(user)) AddFab("إضافة") { nav.navigate("member_edit/${role.name}/new") }
-    }) {
-        item {
-            OutlinedTextField(q, { q = it }, placeholder = { Text("بحث بالاسم أو الجوال") }, singleLine = true,
-                leadingIcon = { Icon(Icons.Outlined.Search, null) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
-        }
-        if (list.isEmpty()) item { EmptyState("لا توجد حسابات", "أضف أول حساب من زر الإضافة") }
-        items(list, key = { it.id }) { m ->
-            AppCard(onClick = { nav.navigate("member_edit/${role.name}/${m.id}") }, padding = 12.dp) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(m.fullName, color = if (m.role == Role.TEACHER) Brand.Maroon else Brand.Navy)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(m.fullName, style = MaterialTheme.typography.titleSmall)
-                        val extra = when (m.role) {
-                            Role.TEACHER -> snap.circles.filter { it.teacherId == m.id }.joinToString("، ") { it.name }.ifBlank { "بدون حلقة" }
-                            Role.PARENT -> m.childIds.mapNotNull { snap.student(it)?.fullName }.joinToString("، ").ifBlank { "لم يُربط بأبناء" }
-                            Role.STUDENT -> snap.student(m.studentId)?.let { snap.circle(it.circleId)?.name } ?: ""
-                            Role.ADMIN -> m.role.label
-                        }
-                        Text(m.phone + " • " + extra, style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (!m.active) Pill("موقوف", Brand.Red)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun MemberEditScreen(user: Member, nav: NavHostController, role: Role, id: String) {
-    val snap = snapshot()
-    val actions = rememberActions()
-    val repo = LocalContainer.current.center
-    val existing = snap.member(id)
-    var name by remember { mutableStateOf(existing?.fullName ?: "") }
-    var phone by remember { mutableStateOf(existing?.phone ?: "") }
-    var pass by remember { mutableStateOf("") }
-    var active by remember { mutableStateOf(existing?.active ?: true) }
-    var children by remember { mutableStateOf(existing?.childIds ?: emptyList()) }
-    var studentId by remember { mutableStateOf(existing?.studentId) }
-    var pickChild by remember { mutableStateOf(false) }
-    var pickStudent by remember { mutableStateOf(false) }
-    var resetPass by remember { mutableStateOf(false) }
-    val title = (if (existing == null) "إضافة " else "تعديل ") + role.label
-    val canEdit = Permissions.canManageMembers(user)
-
-    ScreenList(title, onBack = { nav.popBackStack() }) {
-        item {
-            AppCard {
-                Field(name, { name = it }, "الاسم الكامل")
-                Spacer(Modifier.height(10.dp))
-                Field(phone, { phone = it }, "رقم الجوال (يُستخدم لتسجيل الدخول)", keyboard = KeyboardType.Phone)
-                if (existing == null) {
-                    Spacer(Modifier.height(10.dp))
-                    Field(pass, { pass = it }, "كلمة مرور مؤقتة (6 أحرف على الأقل)")
-                }
-                if (existing != null) {
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("الحساب مفعّل", modifier = Modifier.weight(1f))
-                        Switch(active, { active = it }, enabled = existing.id != user.id)
-                    }
-                }
-            }
-        }
-        if (role == Role.PARENT) {
-            item { SectionHeader("الأبناء المرتبطون", "ربط ابن") { pickChild = true } }
-            if (children.isEmpty()) item { Text("لم يُربط أي ابن بعد. ولي الأمر يرى أبناءه المرتبطين فقط.", color = Brand.Muted, style = MaterialTheme.typography.bodySmall) }
-            items(children) { cid ->
-                val s = snap.student(cid)
-                AppCard(padding = 10.dp) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(s?.fullName ?: "؟", 36.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text(s?.fullName ?: "طالب محذوف", modifier = Modifier.weight(1f))
-                        IconButton(onClick = { children = children - cid }) { Icon(Icons.Outlined.LinkOff, "إلغاء الربط", tint = Brand.Red) }
-                    }
-                }
-            }
-        }
-        if (role == Role.STUDENT) {
-            item {
-                SectionHeader("سجل الطالب المرتبط")
-                SelectorField("الطالب", snap.student(studentId)?.fullName ?: "اختر الطالب") { pickStudent = true }
-            }
-        }
-        item {
-            Spacer(Modifier.height(8.dp))
-            Button(
-                enabled = canEdit,
-                onClick = {
-                    if (existing == null) {
-                        actions.run("تمت إضافة الحساب", {
-                            repo.createMember(NewMember(name, phone, role, pass, studentId, children))
-                        }) { nav.popBackStack() }
-                    } else {
-                        actions.run("تم حفظ التعديلات", {
-                            repo.updateMember(existing.copy(fullName = name.trim(), phone = phone.filter { it.isDigit() }, active = active, childIds = children, studentId = studentId))
-                        }) { nav.popBackStack() }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
-            ) { Text(if (existing == null) "إنشاء الحساب" else "حفظ") }
-            if (existing != null) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { resetPass = true }, enabled = canEdit, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp)) {
-                    Icon(Icons.Outlined.LockReset, null); Spacer(Modifier.width(6.dp)); Text("إعادة تعيين كلمة المرور")
-                }
-            }
-        }
-    }
-    if (pickChild) PickerDialog("اختر الابن", snap.students.filter { it.id !in children }, { it.fullName }, { children = children + it.id }, { pickChild = false }, searchable = true)
-    if (pickStudent) PickerDialog("اختر الطالب", snap.students, { it.fullName }, { studentId = it.id }, { pickStudent = false }, searchable = true)
-    if (resetPass && existing != null) {
-        var np by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { resetPass = false },
-            title = { Text("كلمة مرور جديدة") },
-            text = { Field(np, { np = it }, "6 أحرف على الأقل") },
-            confirmButton = {
-                Button(onClick = {
-                    actions.run("تم تعيين كلمة المرور", { repo.resetMemberPassword(existing.id, np) }) { resetPass = false }
-                }) { Text("تعيين") }
-            },
-            dismissButton = { TextButton(onClick = { resetPass = false }) { Text("إلغاء") } }
-        )
     }
 }
 

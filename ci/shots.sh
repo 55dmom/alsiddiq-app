@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs the APK on the emulator and captures the main screens of every role (demo data).
+# Installs the demo APK on the emulator and captures the v3 screens (sample data on the phone only).
 set -x
 APK="$1"
 PKG=com.alsiddiq.app.debug
@@ -23,20 +23,23 @@ shot() { # name role route wait
 }
 
 adb logcat -c
-shot 00_login "" "" 14
-shot 01_admin_home admin home 14
-shot 02_admin_circles admin circles
-shot 03_admin_students admin students
-shot 04_admin_reports admin reports
-shot 05_admin_more admin more
-shot 06_teacher_home teacher home
-shot 07_teacher_record teacher record/s1
-shot 08_teacher_attendance teacher attendance
-shot 09_circle_detail teacher circle/c1
-shot 10_student_home student home
-shot 11_student_rewards student rewards
-shot 12_parent_home parent home
-shot 13_student_profile parent student/s1
-shot 14_parent_notifications parent notifications
-shot 15_admin_add_student admin student_edit/new
+shot 00_password gate "" 14
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT; sleep 0.9; adb exec-out screencap -p > shots/00b_splash.png; sleep 8
+shot 01_viewer_home viewer home 14
+shot 02_viewer_settings viewer viewer_settings
+shot 03_role_login_admin viewer role_login/ADMIN
+shot 04_role_login_teacher viewer role_login/TEACHER
+shot 05_viewer_students viewer students
+shot 06_viewer_student viewer student/s1
+shot 07_admin_panel admin more
+shot 08_admin_home admin home
+shot 09_admin_teachers admin teachers
+shot 10_admin_teacher_edit admin teacher_edit/m-t1
+shot 11_admin_passwords admin passwords
+shot 12_teacher_home teacher home
+shot 13_teacher_circle teacher circle/c1
+shot 14_teacher_record teacher record/s1
+shot 15_teacher_attendance teacher attendance
+shot 16_teacher_report teacher circle_report/c1
+shot 17_teacher_more teacher teacher_more
 ls -la shots

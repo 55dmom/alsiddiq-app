@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions

@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions
@@ -101,14 +100,14 @@ fun AnnounceNewScreen(user: Member, nav: NavHostController) {
                 Spacer(Modifier.height(12.dp))
                 Text("يصل إلى", style = MaterialTheme.typography.labelMedium, color = Brand.Muted)
                 Spacer(Modifier.height(6.dp))
-                ChoiceChips(Audience.entries.map { it.label }, aud, { aud = it })
+                ChoiceChips(listOf(Audience.ALL, Audience.TEACHERS).map { it.label }, aud, { aud = it })
             }
         }
         item {
             Button(
                 onClick = {
                     actions.run("نُشر الإعلان وأُرسل إشعار", {
-                        repo.postAnnouncement(Announcement("", title.trim(), body.trim(), Audience.entries[aud], user.id))
+                        repo.postAnnouncement(Announcement("", title.trim(), body.trim(), listOf(Audience.ALL, Audience.TEACHERS)[aud], user.id))
                     }) { nav.popBackStack() }
                 },
                 enabled = Permissions.canPostAnnouncement(user) && title.isNotBlank(),

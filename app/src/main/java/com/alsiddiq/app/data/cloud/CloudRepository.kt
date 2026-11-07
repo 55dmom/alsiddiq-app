@@ -33,6 +33,10 @@ data class PendingOp(
 private data class CloudState(
     val session: Session? = null,
     val me: Member? = null,
+    /** The general (viewer) login kept underneath while a teacher/admin works from Settings. */
+    val baseSession: Session? = null,
+    val baseMe: Member? = null,
+    val centerName: String = "",
     val centerId: String? = null,
     val cache: CenterSnapshot = CenterSnapshot(),
     val outbox: List<PendingOp> = emptyList(),
@@ -58,6 +62,10 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     override val mode = BackendMode.CLOUD
     private val _user = MutableStateFlow(st.me)
     override val currentUser: StateFlow<Member?> = _user.asStateFlow()
+    private val _base = MutableStateFlow(st.baseMe)
+    override val baseUser: StateFlow<Member?> = _base.asStateFlow()
+    private val _centerName = MutableStateFlow(st.centerName)
+    override val centerName: StateFlow<String> = _centerName.asStateFlow()
     private val _snapshot = MutableStateFlow(st.cache)
     override val snapshot: StateFlow<CenterSnapshot> = _snapshot.asStateFlow()
     private val _sync = MutableStateFlow<SyncState>(if (st.outbox.isEmpty()) SyncState.Synced else SyncState.Pending(st.outbox.size))
@@ -87,17 +95,27 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     private fun publish() {
         _snapshot.value = st.cache
         _user.value = st.me
+        _base.value = st.baseMe
+        if (st.centerName.isNotBlank()) _centerName.value = st.centerName
         _sync.value = if (st.outbox.isEmpty()) SyncState.Synced else SyncState.Pending(st.outbox.size)
     }
 
-    private fun digits(p: String) = p.map { c -> if (c in '٠'..'٩') ('0' + (c - '٠')) else c }.filter { it.isDigit() }.joinToString("")
-    private fun emailFor(phone: String) = digits(phone) + "@alsiddiq.app"
+    /** Arabic-Indic digits typed on an Arabic keyboard count as the same password as Latin digits. */
+    private fun normPw(p: String) = p.map { c -> if (c in '٠'..'٩') ('0' + (c - '٠')) else c }.joinToString("").trim()
 
     private suspend fun token(): String {
         val s = st.session ?: throw PermissionDenied("سجّل الدخول أولاً")
         if (s.expiresAt - System.currentTimeMillis() > 60_000) return s.accessToken
         val fresh = try { api.refresh(s.refreshToken) } catch (e: ApiException) {
-            if (e.code in 400..499) { lock.withLock { st = CloudState(); save(); publish() } }
+            if (e.code in 400..499) {
+                // This login ended on the server (its password was changed or the teacher removed).
+                lock.withLock {
+                    st = if (st.baseSession != null && st.baseSession != s)
+                        st.copy(session = st.baseSession, me = st.baseMe, baseSession = null, baseMe = null, cache = CenterSnapshot(center = st.cache.center), outbox = emptyList())
+                    else CloudState(centerName = st.centerName)
+                    save(); publish()
+                }
+            }
             throw e
         }
         st = st.copy(session = fresh); save()
@@ -106,47 +124,83 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
 
     // ---------------- first-time setup ----------------
     override suspend fun needsSetup(): Boolean? = runCatching {
-        api.function(null, "admin-members", buildJsonObject { put("action", "status") })["needs_setup"]?.jsonPrimitive?.booleanOrNull
+        val o = api.function(null, "access", buildJsonObject { put("action", "status") })
+        o["center_name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.let { n ->
+            lock.withLock { st = st.copy(centerName = n); save() }; _centerName.value = n
+        }
+        o["needs_setup"]?.jsonPrimitive?.booleanOrNull
     }.getOrNull()
 
-    override suspend fun bootstrap(centerName: String, fullName: String, phone: String, password: String): Result<Member> = runCatching {
-        api.function(null, "admin-members", buildJsonObject {
-            put("action", "bootstrap"); put("center_name", centerName); put("full_name", fullName)
-            put("phone", digits(phone)); put("password", password)
-        })
-        signIn(phone, password).getOrThrow()
-    }
+    private fun memberFrom(p: JsonObject) = Member(
+        id = p["id"]!!.jsonPrimitive.content,
+        fullName = p["full_name"]?.jsonPrimitive?.contentOrNull ?: "",
+        phone = "",
+        role = when (p["access_kind"]?.jsonPrimitive?.contentOrNull) { "admin" -> Role.ADMIN; "teacher" -> Role.TEACHER; else -> Role.VIEWER }
+    )
 
-    // ---------------- auth ----------------
-    override suspend fun signIn(login: String, password: String): Result<Member> = runCatching {
-        if (digits(login).length < 8) throw ValidationError("رقم الجوال غير صحيح")
-        val s = try { api.signIn(emailFor(login), password) } catch (e: OfflineException) { throw ValidationError("لا يوجد اتصال بالإنترنت") }
-        val prof = api.selectAll(s.accessToken, "profiles", "select=*&id=eq.${s.userId}").firstOrNull()
-            ?: throw ValidationError("الحساب غير مكتمل، راجع إدارة المركز")
-        val me = Rows.member(prof, emptyMap())
-        if (!me.active) throw ValidationError("هذا الحساب موقوف، راجع إدارة المركز")
+    private suspend fun accessCall(body: JsonObject, token: String? = null): JsonObject =
+        try { api.function(token, "access", body) }
+        catch (e: OfflineException) { throw ValidationError("الدخول يحتاج اتصالاً بالإنترنت أول مرة") }
+
+    /** Store a fresh login. [keepBase] = it was opened from Settings over the general view. */
+    private suspend fun adopt(o: JsonObject, keepBase: Boolean): Member {
+        val s = api.sessionOf(o["session"]!!.jsonObject)
+        val me = memberFrom(o["profile"]!!.jsonObject)
+        val name = o["center_name"]?.jsonPrimitive?.contentOrNull ?: st.centerName
         lock.withLock {
-            st = CloudState(session = s, me = me, centerId = prof["center_id"]?.jsonPrimitive?.contentOrNull)
+            val base = st.session?.takeIf { keepBase && st.me?.role == Role.VIEWER && me.role != Role.VIEWER }
+            val baseMe = st.me?.takeIf { base != null }
+            st = CloudState(session = s, me = me, baseSession = base ?: st.baseSession.takeIf { keepBase }, baseMe = baseMe ?: st.baseMe.takeIf { keepBase },
+                centerName = name, centerId = null, outbox = emptyList())
+            if (me.role == Role.VIEWER) st = st.copy(baseSession = null, baseMe = null)
             save()
         }
+        _centerName.value = name
+        val center = runCatching { api.selectAll(s.accessToken, "centers", "select=id&limit=1").firstOrNull()?.get("id")?.jsonPrimitive?.contentOrNull }.getOrNull()
+        lock.withLock { st = st.copy(centerId = center); save() }
         runCatching { reload() }
         // Don't raise phone notifications for what was already waiting before this sign-in.
         lock.withLock { st = st.copy(seenNotificationIds = st.cache.notifications.map { it.id }); save() }
         publish()
-        st.me ?: me
+        return st.me ?: me
+    }
+
+    override suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String): Result<Member> = runCatching {
+        val a = normPw(adminPassword); val v = normPw(viewerPassword)
+        if (a.length < 6 || v.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
+        if (a == v) throw ValidationError("كلمة سر الإدارة يجب أن تختلف عن كلمة السر العامة")
+        val o = accessCall(buildJsonObject {
+            put("action", "setup"); put("center_name", centerName.trim()); put("admin_password", a); put("viewer_password", v)
+        })
+        adopt(o, keepBase = false)
+    }
+
+    override suspend fun signIn(password: String, kind: Role?): Result<Member> = runCatching {
+        val pw = normPw(password)
+        if (pw.isEmpty()) throw ValidationError("اكتب كلمة السر")
+        val o = accessCall(buildJsonObject {
+            put("action", "login"); put("password", pw)
+            put("kind", when (kind) { Role.ADMIN -> "admin"; Role.TEACHER -> "teacher"; else -> null })
+        })
+        adopt(o, keepBase = kind != null)
+    }
+
+    override suspend fun leaveRole() {
+        val t = st.session?.accessToken
+        lock.withLock {
+            st = if (st.baseSession != null) st.copy(session = st.baseSession, me = st.baseMe, baseSession = null, baseMe = null,
+                cache = CenterSnapshot(center = st.cache.center), outbox = emptyList())
+            else CloudState(centerName = st.centerName)
+            save(); publish()
+        }
+        if (t != null) scope.launch { api.signOut(t) }
+        if (st.session != null) scope.launch { runCatching { syncNow() } }
     }
 
     override suspend fun signOut() {
-        val t = st.session?.accessToken
-        lock.withLock { st = CloudState(); save(); publish() }
-        if (t != null) scope.launch { api.signOut(t) }
-    }
-
-    override suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> = runCatching {
-        val me = st.me ?: throw PermissionDenied()
-        if (newPassword.length < 6) throw ValidationError("كلمة المرور 6 أحرف على الأقل")
-        try { api.signIn(emailFor(me.phone), oldPassword) } catch (e: ApiException) { throw ValidationError("كلمة المرور الحالية غير صحيحة") }
-        api.updatePassword(token(), newPassword)
+        val ts = listOfNotNull(st.session?.accessToken, st.baseSession?.accessToken)
+        lock.withLock { st = CloudState(centerName = st.centerName); save(); publish() }
+        ts.forEach { t -> scope.launch { api.signOut(t) } }
     }
 
     // ---------------- sync ----------------
@@ -164,7 +218,6 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         coroutineScope {
             val centers = async { api.selectAll(t, "centers") }
             val profiles = async { api.selectAll(t, "profiles") }
-            val links = async { api.selectAll(t, "parent_students") }
             val circles = async { api.selectAll(t, "circles", "select=*&order=name") }
             val students = async { api.selectAll(t, "students", "select=*&order=full_name") }
             val recs = async { api.selectAll(t, "recitations", "select=*&order=recorded_at.desc") }
@@ -172,8 +225,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             val rewards = async { api.selectAll(t, "rewards", "select=*&order=created_at.desc") }
             val ann = async { api.selectAll(t, "announcements", "select=*&order=created_at.desc") }
             val notes = async { api.selectAll(t, "notifications", "select=*&user_id=eq.${me.id}&order=created_at.desc") }
-            val children = links.await().groupBy({ it["parent_id"]!!.jsonPrimitive.content }, { it["student_id"]!!.jsonPrimitive.content })
-            val members = profiles.await().map { Rows.member(it, children) }
+            val members = profiles.await().map { Rows.member(it) }
             val fresh = CenterSnapshot(
                 center = centers.await().firstOrNull()?.let { Rows.center(it) } ?: CenterInfo(),
                 members = members,
@@ -188,7 +240,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             lock.withLock {
                 // Writes still waiting stay visible on screen until the server has them.
                 val merged = if (st.outbox.isEmpty()) fresh else overlayPending(fresh)
-                val meNow = members.firstOrNull { it.id == me.id } ?: me
+                val meNow = me.copy(fullName = members.firstOrNull { it.id == me.id }?.fullName ?: me.fullName)
                 st = st.copy(cache = merged, me = meNow, lastSyncAt = System.currentTimeMillis())
                 save(); publish()
             }
@@ -284,44 +336,66 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     }
 
     private suspend fun adminFunction(body: JsonObject): JsonObject {
-        try { return api.function(token(), "admin-members", body) }
-        catch (e: OfflineException) { throw ValidationError("إدارة الحسابات تحتاج اتصالاً بالإنترنت") }
+        try { return api.function(token(), "access", body) }
+        catch (e: OfflineException) { throw ValidationError("هذه العملية تحتاج اتصالاً بالإنترنت") }
     }
 
-    override suspend fun createMember(m: NewMember): Result<Member> = guarded {
+    override suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member> = guarded {
         require(Permissions.canManageMembers(me()))
-        if (m.fullName.isBlank()) throw ValidationError("اكتب الاسم")
-        if (digits(m.phone).length < 8) throw ValidationError("رقم الجوال غير صحيح")
-        if (m.password.length < 6) throw ValidationError("كلمة المرور 6 أحرف على الأقل")
+        if (name.isBlank()) throw ValidationError("اكتب اسم المعلم")
+        val pw = password?.let { normPw(it) }?.takeIf { it.isNotEmpty() }
+        if (id == null && pw == null) throw ValidationError("اختر كلمة سر للمعلم")
+        if (pw != null && pw.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
         val res = adminFunction(buildJsonObject {
-            put("action", "create"); put("full_name", m.fullName.trim()); put("phone", digits(m.phone))
-            put("role", m.role.name.lowercase()); put("password", m.password); put("student_id", m.studentId)
-            putJsonArray("child_ids") { m.childIds.forEach { add(it) } }
+            put("action", "teacher_save"); put("id", id); put("name", name.trim()); put("circle_id", circleId ?: "")
+            if (pw != null) put("password", pw)
         })
-        val prof = res["profile"]?.jsonObject ?: throw ValidationError("تعذّر إنشاء الحساب")
-        val member = Rows.member(prof, mapOf(prof["id"]!!.jsonPrimitive.content to m.childIds))
-        lock.withLock { st = st.copy(cache = st.cache.copy(members = st.cache.members + member)); save(); publish() }
+        val m = memberFrom(res["profile"]!!.jsonObject)
+        lock.withLock {
+            val d = st.cache
+            st = st.copy(cache = d.copy(
+                members = if (d.members.any { it.id == m.id }) d.members.map { if (it.id == m.id) m else it } else d.members + m,
+                circles = d.circles.map { when { it.id == circleId -> it.copy(teacherId = m.id); it.teacherId == m.id -> it.copy(teacherId = null); else -> it } }
+            )); save(); publish()
+        }
         scope.launch { runCatching { syncNow() } }
-        Result.success(member)
+        Result.success(m)
     }
 
-    override suspend fun updateMember(m: Member): Result<Unit> = guarded {
+    override suspend fun removeTeacher(id: String): Result<Unit> = guarded {
         require(Permissions.canManageMembers(me()))
-        adminFunction(buildJsonObject {
-            put("action", "update"); put("id", m.id); put("full_name", m.fullName); put("phone", digits(m.phone))
-            put("active", m.active); put("student_id", m.studentId)
-            putJsonArray("child_ids") { m.childIds.forEach { add(it) } }
-        })
-        lock.withLock { st = st.copy(cache = st.cache.copy(members = st.cache.members.map { if (it.id == m.id) m else it })); save(); publish() }
+        adminFunction(buildJsonObject { put("action", "teacher_remove"); put("id", id) })
+        lock.withLock {
+            val d = st.cache
+            st = st.copy(cache = d.copy(members = d.members.map { if (it.id == id) it.copy(active = false) else it },
+                circles = d.circles.map { if (it.teacherId == id) it.copy(teacherId = null) else it })); save(); publish()
+        }
         scope.launch { runCatching { syncNow() } }
         Result.success(Unit)
     }
 
-    override suspend fun resetMemberPassword(memberId: String, newPassword: String): Result<Unit> = guarded {
+    override suspend fun setAccessPassword(target: Role, password: String): Result<Unit> = guarded {
         require(Permissions.canManageMembers(me()))
-        if (newPassword.length < 6) throw ValidationError("كلمة المرور 6 أحرف على الأقل")
-        adminFunction(buildJsonObject { put("action", "reset_password"); put("id", memberId); put("password", newPassword) })
+        val pw = normPw(password)
+        if (pw.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
+        adminFunction(buildJsonObject { put("action", "set_password"); put("target", if (target == Role.ADMIN) "admin" else "viewer"); put("password", pw) })
         Result.success(Unit)
+    }
+
+    /** Debug-only (CI): try raw writes past the app's own checks so the server's own answer is logged. */
+    suspend fun debugRawWrites(studentId: String, circleId: String?): List<String> {
+        val t = token(); val me = me(); val center = center()
+        val rec = buildJsonObject {
+            put("id", newId()); put("center_id", center); put("student_id", studentId); put("circle_id", circleId); put("teacher_id", me.id)
+            put("kind", "hifz"); put("from_surah", 1); put("from_ayah", 1); put("to_surah", 1); put("to_ayah", 7); put("grade", "excellent"); put("notes", "selftest-raw")
+        }
+        val att = buildJsonObject {
+            put("center_id", center); put("student_id", studentId); put("circle_id", circleId); put("day", "2026-01-01"); put("status", "absent"); put("recorded_by", me.id)
+        }
+        val r1 = api.rawInsert(t, "recitations", rec)
+        val r2 = api.rawInsert(t, "attendance", att)
+        val r3 = api.rawPatch(t, "students", "id=eq.$studentId", buildJsonObject { put("notes", "selftest-edit-by-" + me.role.name.lowercase()) })
+        return listOf("recitation=${r1.first}", "attendance=${r2.first}", "student_edit=${r3.first}:${if (r3.second.trim() == "[]") "0rows" else "changed"}")
     }
 
     override suspend fun saveCircle(c: Circle): Result<Circle> = guarded {
@@ -341,7 +415,9 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     }
 
     override suspend fun saveStudent(s: Student): Result<Student> = guarded {
-        require(Permissions.canManageStudents(me()))
+        val existing = st.cache.student(s.id)
+        require(if (existing == null) Permissions.canAddStudentTo(me(), s.circleId, st.cache)
+                else Permissions.canEditStudent(me(), existing, st.cache) && Permissions.canAddStudentTo(me(), s.circleId, st.cache))
         if (s.fullName.isBlank()) throw ValidationError("اكتب اسم الطالب")
         val saved = if (s.id.isBlank()) s.copy(id = newId()) else s
         write(PendingOp(type = "upsert", table = "students", body = Rows.studentRow(saved, center()).toString()), saved) { d ->

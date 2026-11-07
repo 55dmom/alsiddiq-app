@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions
@@ -67,7 +66,9 @@ fun TeacherHome(user: Member, nav: NavHostController) {
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 StatusBanners(Modifier.padding(top = 12.dp))
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
+                RoleStrip(user)
+                Spacer(Modifier.height(10.dp))
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         ProgressRing(if (students.isEmpty()) 0f else logged.count { id -> students.any { it.id == id } }.toFloat() / students.size, size = 92.dp, stroke = 10.dp, color = Brand.Green, track = Brand.GreenSoft) {
@@ -98,8 +99,8 @@ fun TeacherHome(user: Member, nav: NavHostController) {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 SectionHeader("أدوات", null)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    QuickAction("تقرير اليوم", Icons.Outlined.Summarize, Modifier.weight(1f)) { circles.firstOrNull()?.let { nav.navigate("circle_report/${it.id}") } }
                     QuickAction("المكافآت", Icons.Outlined.EmojiEvents, Modifier.weight(1f)) { nav.navigate("rewards") }
-                    QuickAction("التقارير", Icons.Outlined.Insights, Modifier.weight(1f)) { nav.navigate("reports") }
                     QuickAction("الإعلانات", Icons.Outlined.Campaign, Modifier.weight(1f)) { nav.navigate("announcements") }
                 }
                 SectionHeader("آخر ما سجّلت")
@@ -111,99 +112,6 @@ fun TeacherHome(user: Member, nav: NavHostController) {
 }
 
 @Composable
-fun StudentHome(user: Member, nav: NavHostController) {
-    val snap = snapshot()
-    val demo = isDemo()
-    val s = snap.student(user.studentId)
-    val today = LocalDate.now()
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            HomeHeader("السلام عليكم", user.fullName, "«خيركم من تعلّم القرآن وعلّمه»", snap.notifications.count { !it.read }) { nav.navigate("notifications") }
-        }
-        item { Box(Modifier.padding(horizontal = 16.dp)) { StatusBanners() } }
-        if (s == null) item { EmptyState("الحساب غير مرتبط بسجل طالب", "تواصل مع إدارة المركز") }
-        else {
-            // Same dashboard the teacher and parent see, with side padding.
-            studentDashboard(this, s, snap, nav, user, hPad = 16.dp)
-        }
-    }
-}
-
-@Composable
-fun ParentHome(user: Member, nav: NavHostController) {
-    val snap = snapshot()
-    val demo = isDemo()
-    val kids = Permissions.visibleStudents(user, snap)
-    val today = LocalDate.now()
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
-            HomeHeader("مرحباً بك", user.fullName, "تابع حفظ أبنائك وحضورهم يوماً بيوم", snap.notifications.count { !it.read }) { nav.navigate("notifications") }
-        }
-        item {
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                StatusBanners(Modifier.padding(top = 12.dp))
-                SectionHeader("أبنائي")
-                if (kids.isEmpty()) EmptyState("لا يوجد أبناء مرتبطون", "تواصل مع إدارة المركز لربط حسابك بأبنائك")
-            }
-        }
-        items(kids, key = { it.id }) { s ->
-            val st = remember(s, snap) { Stats.forStudent(s, snap) }
-            val todayAtt = snap.attendance.firstOrNull { it.studentId == s.id && it.day == today.toString() }
-            Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                AppCard(onClick = { nav.navigate("student/${s.id}") }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        ProgressRing(st.goalProgress, size = 84.dp, stroke = 9.dp) {
-                            Text(Fmt.pct(st.goalProgress), style = MaterialTheme.typography.labelLarge, color = Brand.Navy)
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(s.fullName, style = MaterialTheme.typography.titleMedium)
-                            Text(snap.circle(s.circleId)?.name ?: "", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-                            Spacer(Modifier.height(6.dp))
-                            Text("${Fmt.one(st.juzEquivalent)} جزء من ${s.goalJuz} • ${st.points} نقطة", style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(6.dp))
-                            Row {
-                                if (todayAtt != null) { Pill("اليوم: ${todayAtt.status.label}", attendanceColor(todayAtt.status)); Spacer(Modifier.width(6.dp)) }
-                                st.lastRecord?.let { Pill(it.grade.label, gradeColor(it.grade)) }
-                            }
-                        }
-                    }
-                    st.lastRecord?.let {
-                        Spacer(Modifier.height(10.dp))
-                        HorizontalDivider(color = Brand.Line)
-                        Spacer(Modifier.height(8.dp))
-                        Text("آخر تسميع: ${it.kind.label} — ${Stats.describeRange(it)} • ${Fmt.relative(it.recordedAt)}", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-                    }
-                }
-            }
-        }
-        item {
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                SectionHeader("إعلانات المركز", "الكل") { nav.navigate("announcements") }
-                snap.announcements.sortedByDescending { it.createdAt }.take(2).forEach { a ->
-                    AppCard(onClick = { nav.navigate("announcements") }, padding = 12.dp) {
-                        Text(a.title, style = MaterialTheme.typography.titleSmall)
-                        Text(a.body, style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-        }
-    }
-}
-
-data class AwardBadge(val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val earned: Boolean)
-
-fun badgesFor(st: StudentStats): List<AwardBadge> = listOf(
-    AwardBadge("أول جزء", Icons.Outlined.MenuBook, st.juzEquivalent >= 1),
-    AwardBadge("100 آية", Icons.Outlined.AutoStories, st.memorisedAyat >= 100),
-    AwardBadge("أسبوع متواصل", Icons.Outlined.LocalFireDepartment, st.streakDays >= 6),
-    AwardBadge("حضور 90%", Icons.Outlined.EventAvailable, st.attendanceRate >= 0.9f && st.presentDays >= 10),
-    AwardBadge("متقن", Icons.Outlined.WorkspacePremium, st.averageGrade >= 4.5),
-    AwardBadge("5 أجزاء", Icons.Outlined.Diamond, st.juzEquivalent >= 5)
-)
-
-@Composable
 fun RewardsScreen(user: Member, nav: NavHostController, onBack: (() -> Unit)?) {
     val snap = snapshot()
     val actions = rememberActions()
@@ -213,7 +121,7 @@ fun RewardsScreen(user: Member, nav: NavHostController, onBack: (() -> Unit)?) {
     var giving by remember { mutableStateOf<Student?>(null) }
     var pickStudent by remember { mutableStateOf(false) }
     ScreenList("المكافآت", onBack = onBack, fab = { if (canGive) AddFab("منح مكافأة") { pickStudent = true } }) {
-        if (user.role == Role.STUDENT || user.role == Role.PARENT) {
+        if (false) {
             visible.forEach { s ->
                 item(key = "card" + s.id) {
                     val st = remember(s, snap) { Stats.forStudent(s, snap) }
@@ -318,61 +226,3 @@ fun RewardsScreen(user: Member, nav: NavHostController, onBack: (() -> Unit)?) {
     }
 }
 
-@Composable
-fun ProfileScreen(user: Member, nav: NavHostController, onBack: (() -> Unit)?) {
-    val container = LocalContainer.current
-    val actions = rememberActions()
-    val scope = rememberCoroutineScope()
-    var changing by remember { mutableStateOf(false) }
-    var askLogout by remember { mutableStateOf(false) }
-    val snap = snapshot()
-    ScreenList("حسابي", onBack = onBack) {
-        item {
-            AppCard {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Avatar(user.fullName, 76.dp)
-                    Spacer(Modifier.height(10.dp))
-                    Text(user.fullName, style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.height(4.dp))
-                    Pill(user.role.label, Brand.Maroon)
-                    Spacer(Modifier.height(4.dp))
-                    Text(user.phone, style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-                }
-            }
-        }
-        item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
-        item { MenuRow("الإعلانات", "إعلانات المركز", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
-        if (user.role == Role.TEACHER) item { MenuRow("المكافآت", "منح النقاط ولوحة الشرف", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
-        if (user.role == Role.PARENT) item { MenuRow("المكافآت", "نقاط وأوسمة أبنائي", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
-        item { MenuRow("تغيير كلمة المرور", "حدّث كلمة المرور الخاصة بك", Icons.Outlined.Password) { changing = true } }
-        item { MenuRow("عن التطبيق", "الإصدار وحالة المزامنة", Icons.Outlined.Info) { nav.navigate("about") } }
-        item { MenuRow("تسجيل الخروج", "الخروج من هذا الجهاز", Icons.AutoMirrored.Outlined.Logout, Brand.Red) { askLogout = true } }
-    }
-    if (askLogout) ConfirmDialog("تسجيل الخروج؟", "يمكنك الدخول مرة أخرى برقم جوالك وكلمة المرور.", "خروج",
-        { scope.launch { container.auth.signOut() } }, { askLogout = false }, destructive = true)
-    if (changing) {
-        var old by remember { mutableStateOf("") }
-        var new1 by remember { mutableStateOf("") }
-        var new2 by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { changing = false },
-            title = { Text("تغيير كلمة المرور") },
-            text = {
-                Column {
-                    Field(old, { old = it }, "كلمة المرور الحالية")
-                    Spacer(Modifier.height(8.dp))
-                    Field(new1, { new1 = it }, "كلمة المرور الجديدة")
-                    Spacer(Modifier.height(8.dp))
-                    Field(new2, { new2 = it }, "تأكيد كلمة المرور الجديدة")
-                    if (new2.isNotEmpty() && new1 != new2) Text("غير متطابقتين", color = Brand.Red, style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = {
-                Button(enabled = new1.isNotEmpty() && new1 == new2, onClick = {
-                    actions.run("تم تغيير كلمة المرور", { container.auth.changePassword(old, new1) }) { changing = false }
-                }) { Text("حفظ") }
-            },
-            dismissButton = { TextButton(onClick = { changing = false }) { Text("إلغاء") } }
-        )
-    }
-}

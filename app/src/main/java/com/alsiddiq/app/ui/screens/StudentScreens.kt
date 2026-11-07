@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions
@@ -63,7 +62,8 @@ fun StudentsScreen(user: Member, nav: NavHostController, circleFilter: String?) 
             (q.isBlank() || s.fullName.contains(q.trim()) || s.phone.contains(q.trim()))
     }
     ScreenList("الطلاب", fab = {
-        if (Permissions.canManageStudents(user)) AddFab("طالب جديد") { nav.navigate("student_edit/new") }
+        if (user.role == Role.ADMIN) AddFab("طالب جديد") { nav.navigate("student_edit/new") }
+        else if (user.role == Role.TEACHER && circles.isNotEmpty()) AddFab("طالب جديد") { nav.navigate("student_edit/new?circle=${circles.first().id}") }
     }) {
         item {
             OutlinedTextField(q, { q = it }, placeholder = { Text("بحث باسم الطالب") }, singleLine = true,
@@ -91,7 +91,7 @@ fun StudentDetailScreen(user: Member, nav: NavHostController, id: String) {
     }
     val canRecord = Permissions.canRecordFor(user, s, snap)
     ScreenList(s.fullName, onBack = { nav.popBackStack() }, actions = {
-        if (Permissions.canManageStudents(user)) IconButton(onClick = { nav.navigate("student_edit/${s.id}") }) { Icon(Icons.Outlined.Edit, "تعديل") }
+        if (Permissions.canEditStudent(user, s, snap)) IconButton(onClick = { nav.navigate("student_edit/${s.id}") }) { Icon(Icons.Outlined.Edit, "تعديل") }
     }, fab = {
         if (canRecord) AddFab("تسجيل تسميع") { nav.navigate("record/${s.id}") }
     }) {
@@ -164,9 +164,6 @@ fun studentDashboard(scope: androidx.compose.foundation.lazy.LazyListScope, s: S
                 KeyValueRow("تاريخ الالتحاق", runCatching { Fmt.date(LocalDate.parse(s.joinedOn)) }.getOrDefault(s.joinedOn))
                 if (s.birthYear != null) KeyValueRow("سنة الميلاد", "${s.birthYear}")
                 KeyValueRow("الحالة", s.status.label)
-                if (user.role == Role.ADMIN || user.role == Role.TEACHER) {
-                    KeyValueRow("أولياء الأمور", snap.parentsOf(s.id).joinToString("، ") { it.fullName }.ifBlank { "—" })
-                }
             }
         }
     }
@@ -193,7 +190,7 @@ fun StudentEditScreen(user: Member, nav: NavHostController, id: String, presetCi
             AppCard {
                 Field(name, { name = it }, "اسم الطالب الكامل")
                 Spacer(Modifier.height(10.dp))
-                Field(phone, { phone = it }, "جوال الطالب أو ولي الأمر", keyboard = KeyboardType.Phone)
+                Field(phone, { phone = it }, "جوال ولي الأمر (اختياري)", keyboard = KeyboardType.Phone)
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Field(birth, { birth = it.filter { c -> c.isDigit() }.take(4) }, "سنة الميلاد", Modifier.weight(1f), KeyboardType.Number)
@@ -222,14 +219,11 @@ fun StudentEditScreen(user: Member, nav: NavHostController, id: String, presetCi
             ) { Text(if (existing == null) "إضافة الطالب" else "حفظ") }
             if (existing != null) {
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { nav.navigate("member_edit/PARENT/new") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-                    Text("إنشاء حساب ولي أمر")
-                }
-                TextButton(onClick = { askDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("حذف الطالب", color = Brand.Red) }
+                if (Permissions.canManageStudents(user)) TextButton(onClick = { askDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("حذف الطالب", color = Brand.Red) }
             }
         }
     }
-    if (pickCircle) PickerDialog("اختر الحلقة", snap.circles, { it.name }, { circleId = it.id }, { pickCircle = false })
+    if (pickCircle) PickerDialog("اختر الحلقة", Permissions.visibleCircles(user, snap), { it.name }, { circleId = it.id }, { pickCircle = false })
     if (askDelete && existing != null) ConfirmDialog(
         "حذف الطالب؟", "ستُحذف جميع سجلاته وحضوره ومكافآته نهائياً.", "حذف",
         { actions.run("حُذف الطالب", { repo.deleteStudent(existing.id) }) { if (!nav.popBackStack("students", false)) nav.popBackStack("home", false) } },
@@ -248,7 +242,7 @@ fun HistoryScreen(user: Member, nav: NavHostController, studentId: String?, onBa
     val recs = snap.recitations.filter { it.studentId == studentId && (kind == 0 || it.kind == RecordKind.entries[kind - 1]) }
         .sortedByDescending { it.recordedAt }
     val canDelete = s != null && Permissions.canRecordFor(user, s, snap)
-    ScreenList(if (user.role == Role.STUDENT) "سجلّي" else "سجل ${s?.fullName ?: ""}", onBack = onBack) {
+    ScreenList("سجل ${s?.fullName ?: ""}", onBack = onBack) {
         item { ChoiceChips(kinds, kind, { kind = it }) }
         if (recs.isEmpty()) item { EmptyState("لا توجد سجلات", "لم يُسجَّل شيء من هذا النوع بعد") }
         var lastDay: LocalDate? = null

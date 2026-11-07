@@ -54,7 +54,7 @@ class SupabaseApi(private val baseUrl: String, private val publicKey: String) {
             obj?.get(k)?.let { (it as? JsonPrimitive)?.contentOrNull }
         } ?: ""
         return when {
-            raw.contains("Invalid login credentials", true) -> "رقم الجوال أو كلمة المرور غير صحيحة"
+            raw.contains("Invalid login credentials", true) -> "كلمة السر غير صحيحة"
             raw.contains("row-level security", true) || code == 403 -> if (raw.any { it in 'ء'..'ي' }) raw else "ليست لديك صلاحية لهذه العملية"
             raw.contains("duplicate key", true) -> "هذا السجل موجود مسبقاً"
             raw.isNotBlank() && raw.any { it in 'ء'..'ي' } -> raw
@@ -70,8 +70,9 @@ class SupabaseApi(private val baseUrl: String, private val publicKey: String) {
         return text
     }
 
-    private fun sessionFrom(text: String): Session {
-        val o = json.parseToJsonElement(text).jsonObject
+    private fun sessionFrom(text: String): Session = sessionOf(json.parseToJsonElement(text).jsonObject)
+
+    fun sessionOf(o: JsonObject): Session {
         val expiresIn = o["expires_in"]?.jsonPrimitive?.longOrNull ?: 3600
         return Session(
             accessToken = o["access_token"]!!.jsonPrimitive.content,
@@ -120,6 +121,12 @@ class SupabaseApi(private val baseUrl: String, private val publicKey: String) {
     suspend fun delete(token: String, table: String, filter: String) {
         ok("DELETE", "/rest/v1/$table?$filter", token, null, mapOf("Prefer" to "return=minimal"))
     }
+
+    /** Debug self-test: a raw write that bypasses the app's own permission checks, so the SERVER's answer is what shows. */
+    suspend fun rawInsert(token: String, table: String, row: JsonObject): Pair<Int, String> =
+        exec("POST", "/rest/v1/$table", token, row, mapOf("Prefer" to "return=minimal"))
+    suspend fun rawPatch(token: String, table: String, filter: String, row: JsonObject): Pair<Int, String> =
+        exec("PATCH", "/rest/v1/$table?$filter", token, row, mapOf("Prefer" to "return=representation"))
 
     suspend fun function(token: String?, name: String, body: JsonObject): JsonObject {
         val text = ok("POST", "/functions/v1/$name", token, body)

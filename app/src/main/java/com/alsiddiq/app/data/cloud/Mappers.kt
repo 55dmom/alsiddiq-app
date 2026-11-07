@@ -18,10 +18,9 @@ internal object Rows {
 
     fun center(o: JsonObject) = CenterInfo(o.s("name") ?: "", o.s("city") ?: "")
 
-    fun member(o: JsonObject, children: Map<String, List<String>>) = Member(
+    fun member(o: JsonObject) = Member(
         id = o.s("id")!!, fullName = o.s("full_name") ?: "", phone = o.s("phone") ?: "",
-        role = enumOf(o.s("role"), Role.STUDENT), active = o.b("active") ?: true,
-        studentId = o.s("student_id"), childIds = o.s("id")?.let { children[it] } ?: emptyList(), createdAt = ts(o.s("created_at"))
+        role = enumOf(o.s("role"), Role.VIEWER), active = o.b("active") ?: true, createdAt = ts(o.s("created_at"))
     )
 
     fun circle(o: JsonObject) = Circle(

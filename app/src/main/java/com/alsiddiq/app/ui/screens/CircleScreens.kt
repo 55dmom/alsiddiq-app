@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions
@@ -110,15 +109,15 @@ fun CircleDetailScreen(user: Member, nav: NavHostController, id: String) {
                 Button(onClick = { nav.navigate("attendance/${circle.id}") }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp)) {
                     Icon(Icons.Outlined.FactCheck, null); Spacer(Modifier.width(6.dp)); Text("تحضير اليوم")
                 }
-                OutlinedButton(onClick = { nav.navigate("announce_new") }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp)) {
-                    Icon(Icons.Outlined.Campaign, null); Spacer(Modifier.width(6.dp)); Text("إعلان")
+                OutlinedButton(onClick = { nav.navigate("circle_report/${circle.id}") }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp)) {
+                    Icon(Icons.Outlined.Summarize, null); Spacer(Modifier.width(6.dp)); Text("تقرير اليوم")
                 }
             }
         }
         item {
             SectionHeader(
                 "الطلاب" + if (canTeach) " — اضغط لتسجيل التسميع" else "",
-                if (Permissions.canManageStudents(user)) "إضافة طالب" else null
+                if (Permissions.canAddStudentTo(user, circle.id, snap)) "إضافة طالب" else null
             ) { nav.navigate("student_edit/new?circle=${circle.id}") }
         }
         if (students.isEmpty()) item { EmptyState("لا يوجد طلاب في الحلقة", "أضف طلاباً من شاشة الطلاب") }

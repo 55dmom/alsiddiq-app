@@ -15,11 +15,15 @@ class MainActivity : ComponentActivity() {
         // Debug-only hooks used by CI to open a screen directly for screenshots.
         val autoLogin = if (BuildConfig.DEBUG) intent?.getStringExtra("demo_login") else null
         val startRoute = if (BuildConfig.DEBUG) intent?.getStringExtra("route") else null
-        val ciLogin = if (BuildConfig.DEBUG) intent?.getStringExtra("login_phone")?.let { it to (intent?.getStringExtra("login_pass") ?: "") } else null
+        // CI against the real database: login_kind = viewer | admin | teacher, login_pass = that password,
+        // viewer_pass = the general password kept underneath, try_student = "studentId:circleId" for raw write probes.
+        val ciLogin = if (BuildConfig.DEBUG) intent?.getStringExtra("login_pass")?.let { (intent?.getStringExtra("login_kind") ?: "viewer") to it } else null
+        val ciViewer = if (BuildConfig.DEBUG) intent?.getStringExtra("viewer_pass") else null
+        val ciTry = if (BuildConfig.DEBUG) intent?.getStringExtra("try_student") else null
         val selfTest = BuildConfig.DEBUG && intent?.getBooleanExtra("selftest", false) == true
         setContent {
             AlSiddiqTheme {
-                AppRoot(container, autoLogin, startRoute, ciLogin, selfTest)
+                AppRoot(container, autoLogin, startRoute, ciLogin, selfTest, ciViewer, ciTry)
             }
         }
     }

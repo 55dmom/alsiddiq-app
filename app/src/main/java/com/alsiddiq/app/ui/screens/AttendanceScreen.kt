@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions
@@ -52,7 +51,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
-    if (user.role == Role.PARENT || user.role == Role.STUDENT) { AttendanceHistory(user, nav); return }
+    if (user.role == Role.VIEWER) { AttendanceHistory(user, nav); return }
     val snap = snapshot()
     val actions = rememberActions()
     val repo = LocalContainer.current.center
@@ -139,7 +138,7 @@ private fun AttendanceHistory(user: Member, nav: NavHostController) {
     val rows = snap.attendance.filter { it.studentId == s?.id }.sortedByDescending { it.day }
     ScreenList("الحضور") {
         if (kids.size > 1) item { ChoiceChips(kids.map { it.fullName }, idx, { idx = it }) }
-        if (s == null) item { EmptyState("لا يوجد أبناء مرتبطون", "تواصل مع إدارة المركز لربط حسابك بأبنائك") }
+        if (s == null) item { EmptyState("لا يوجد طلاب", "") }
         else {
             item {
                 AppCard {

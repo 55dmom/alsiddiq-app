@@ -9,12 +9,11 @@ import kotlin.random.Random
 
 /** Sample data for design and testing only. Never used once the central database is connected. */
 object DemoSeed {
-    const val VERSION = 3
-    const val DEMO_PASSWORD = "123456"
-    const val ADMIN_PHONE = "0500000001"
-    const val TEACHER_PHONE = "0500000002"
-    const val STUDENT_PHONE = "0500000010"
-    const val PARENT_PHONE = "0500000020"
+    const val VERSION = 7
+    /** Demo passwords (sample data only): general view, admin, and one per teacher. */
+    const val VIEWER_PASSWORD = "111111"
+    const val ADMIN_PASSWORD = "222222"
+    const val TEACHER_PASSWORD = "333331"
 
     private fun h(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
@@ -23,10 +22,11 @@ object DemoSeed {
         val today = LocalDate.now()
         val zone = ZoneId.systemDefault()
 
-        val admin = Member("m-admin", "إدارة المركز", ADMIN_PHONE, Role.ADMIN)
-        val t1 = Member("m-t1", "الشيخ عبدالله الحربي", TEACHER_PHONE, Role.TEACHER)
-        val t2 = Member("m-t2", "الأستاذ خالد العمري", "0500000003", Role.TEACHER)
-        val t3 = Member("m-t3", "الأستاذ ياسر القحطاني", "0500000004", Role.TEACHER)
+        val admin = Member("m-admin", "الإدارة", "", Role.ADMIN)
+        val viewer = Member("m-viewer", "عرض عام", "", Role.VIEWER)
+        val t1 = Member("m-t1", "الشيخ عبدالله الحربي", "", Role.TEACHER)
+        val t2 = Member("m-t2", "الأستاذ خالد العمري", "", Role.TEACHER)
+        val t3 = Member("m-t3", "الأستاذ ياسر القحطاني", "", Role.TEACHER)
 
         val circles = listOf(
             Circle("c1", "حلقة أبي بكر الصديق", t1.id, "متقدم", "بعد العصر • السبت–الأربعاء", 15),
@@ -49,11 +49,7 @@ object DemoSeed {
                 goalJuz = if (circle.id == "c3") 3 else if (circle.id == "c4") 30 else 10
             )
         }
-        val studentUser = Member("m-s1", students[0].fullName, STUDENT_PHONE, Role.STUDENT, studentId = students[0].id)
-        val p1 = Member("m-p1", "والد محمد السالمي", PARENT_PHONE, Role.PARENT, childIds = listOf("s1", "s5"))
-        val p2 = Member("m-p2", "والد أحمد الزهراني", "0500000021", Role.PARENT, childIds = listOf("s2"))
-        val p3 = Member("m-p3", "والدة يوسف الغامدي", "0500000022", Role.PARENT, childIds = listOf("s4", "s8"))
-        val members = listOf(admin, t1, t2, t3, studentUser, p1, p2, p3)
+        val members = listOf(admin, viewer, t1, t2, t3)
 
         val recs = mutableListOf<Recitation>()
         val att = mutableListOf<Attendance>()
@@ -100,15 +96,12 @@ object DemoSeed {
         val now = System.currentTimeMillis()
         val announcements = listOf(
             Announcement("n1", "مسابقة الحفظ الشهرية", "تبدأ مسابقة المركز الشهرية يوم الخميس القادم بعد العصر، والجوائز للمراكز الثلاثة الأولى في كل حلقة.", Audience.ALL, admin.id, now - 2 * 86_400_000L),
-            Announcement("n2", "اجتماع أولياء الأمور", "نتشرف بحضوركم لقاء أولياء الأمور يوم السبت بعد المغرب في مصلى المركز.", Audience.PARENTS, admin.id, now - 4 * 86_400_000L),
+            Announcement("n2", "تقرير حلقة أبي بكر الصديق — أمس", "الحضور: 4 من 5\nالغائبون: زياد القرني\nالحفظ الجديد: 23 آية\nالمراجعة: 40 آية", Audience.ALL, t1.id, now - 86_400_000L),
             Announcement("n3", "تحديث خطة المراجعة", "اعتماد مراجعة جزء كامل أسبوعياً لطلاب الحلقات المتقدمة.", Audience.TEACHERS, admin.id, now - 6 * 86_400_000L)
         )
         val notes = listOf(
-            AppNotification("x1", p1.id, "حفظ جديد: محمد السالمي", "سورة البقرة • ممتاز", "record", null, false, now - 3_600_000L),
-            AppNotification("x2", p1.id, "إعلان: اجتماع أولياء الأمور", "نتشرف بحضوركم لقاء أولياء الأمور يوم السبت بعد المغرب.", "announcement", "n2", false, now - 4 * 86_400_000L),
-            AppNotification("x3", studentUser.id, "مكافأة 🎉", "+15 نقطة: إتقان الحفظ هذا الأسبوع", "reward", null, false, now - 86_400_000L),
             AppNotification("x4", t1.id, "إعلان: تحديث خطة المراجعة", "اعتماد مراجعة جزء كامل أسبوعياً.", "announcement", "n3", true, now - 6 * 86_400_000L),
-            AppNotification("x5", admin.id, "مرحباً بك في مركز الصديق", "هذه نسخة تجريبية ببيانات نموذجية. ستُربط بقاعدة البيانات المركزية قريباً.", "info", null, false, now)
+            AppNotification("x5", admin.id, "مرحباً بك في مركز الصديق", "هذه نسخة تجريبية ببيانات نموذجية.", "info", null, false, now)
         )
         val data = CenterSnapshot(
             center = CenterInfo(),
@@ -116,7 +109,8 @@ object DemoSeed {
             recitations = recs, attendance = att, rewards = rewards,
             announcements = announcements, notifications = notes
         )
-        val hashes = members.associate { it.id to h(DEMO_PASSWORD) }
+        val hashes = mapOf(admin.id to h(ADMIN_PASSWORD), viewer.id to h(VIEWER_PASSWORD),
+            t1.id to h(TEACHER_PASSWORD), t2.id to h("333332"), t3.id to h("333333"))
         return DemoStore(data, hashes, null, VERSION)
     }
 }

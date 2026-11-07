@@ -4,10 +4,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class Role(val label: String) {
-    ADMIN("إدارة المركز"),
+    ADMIN("الإدارة"),
     TEACHER("معلم"),
-    STUDENT("طالب"),
-    PARENT("ولي أمر")
+    /** The general password: read-only view of the whole centre. */
+    VIEWER("عرض عام")
 }
 
 @Serializable
@@ -17,10 +17,6 @@ data class Member(
     val phone: String,
     val role: Role,
     val active: Boolean = true,
-    /** For a STUDENT account: the student record it belongs to. */
-    val studentId: String? = null,
-    /** For a PARENT account: the children it may see. */
-    val childIds: List<String> = emptyList(),
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -163,7 +159,6 @@ data class CenterSnapshot(
     fun circle(id: String?): Circle? = circles.firstOrNull { it.id == id }
     fun student(id: String?): Student? = students.firstOrNull { it.id == id }
     fun studentsIn(circleId: String): List<Student> = students.filter { it.circleId == circleId }
-    fun teachers(): List<Member> = members.filter { it.role == Role.TEACHER }
-    fun parents(): List<Member> = members.filter { it.role == Role.PARENT }
-    fun parentsOf(studentId: String): List<Member> = members.filter { it.role == Role.PARENT && studentId in it.childIds }
+    fun teachers(): List<Member> = members.filter { it.role == Role.TEACHER && it.active }
+    fun circlesOf(teacherId: String): List<Circle> = circles.filter { it.teacherId == teacherId }
 }

@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -38,56 +39,52 @@ import kotlinx.coroutines.delay
 data class TabItem(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
 
 fun tabsFor(role: Role): List<TabItem> = when (role) {
+    Role.VIEWER -> listOf(
+        TabItem("home", "الرئيسية", Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
+        TabItem("students", "الطلاب", Icons.Outlined.School, Icons.Filled.School),
+        TabItem("circles", "الحلقات", Icons.Outlined.Groups, Icons.Filled.Groups),
+        TabItem("reports", "التقارير", Icons.Outlined.Insights, Icons.Filled.Insights),
+        TabItem("viewer_settings", "الإعدادات", Icons.Outlined.Settings, Icons.Filled.Settings)
+    )
     Role.ADMIN -> listOf(
         TabItem("home", "الرئيسية", Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
         TabItem("circles", "الحلقات", Icons.Outlined.Groups, Icons.Filled.Groups),
         TabItem("students", "الطلاب", Icons.Outlined.School, Icons.Filled.School),
         TabItem("reports", "التقارير", Icons.Outlined.Insights, Icons.Filled.Insights),
-        TabItem("more", "المزيد", Icons.Outlined.GridView, Icons.Filled.GridView)
+        TabItem("more", "الإدارة", Icons.Outlined.AdminPanelSettings, Icons.Filled.AdminPanelSettings)
     )
     Role.TEACHER -> listOf(
         TabItem("home", "الرئيسية", Icons.Outlined.Home, Icons.Filled.Home),
-        TabItem("circles", "حلقاتي", Icons.Outlined.Groups, Icons.Filled.Groups),
+        TabItem("circles", "حلقتي", Icons.Outlined.Groups, Icons.Filled.Groups),
         TabItem("record_start", "تسجيل", Icons.Outlined.AddCircleOutline, Icons.Filled.AddCircle),
         TabItem("attendance", "الحضور", Icons.Outlined.FactCheck, Icons.Filled.FactCheck),
-        TabItem("profile", "حسابي", Icons.Outlined.Person, Icons.Filled.Person)
-    )
-    Role.STUDENT -> listOf(
-        TabItem("home", "الرئيسية", Icons.Outlined.Home, Icons.Filled.Home),
-        TabItem("history", "سجلّي", Icons.Outlined.MenuBook, Icons.Filled.MenuBook),
-        TabItem("rewards", "المكافآت", Icons.Outlined.EmojiEvents, Icons.Filled.EmojiEvents),
-        TabItem("notifications", "الإشعارات", Icons.Outlined.Notifications, Icons.Filled.Notifications),
-        TabItem("profile", "حسابي", Icons.Outlined.Person, Icons.Filled.Person)
-    )
-    Role.PARENT -> listOf(
-        TabItem("home", "أبنائي", Icons.Outlined.FamilyRestroom, Icons.Filled.FamilyRestroom),
-        TabItem("reports", "التقارير", Icons.Outlined.Insights, Icons.Filled.Insights),
-        TabItem("attendance", "الحضور", Icons.Outlined.EventAvailable, Icons.Filled.EventAvailable),
-        TabItem("notifications", "الإشعارات", Icons.Outlined.Notifications, Icons.Filled.Notifications),
-        TabItem("profile", "حسابي", Icons.Outlined.Person, Icons.Filled.Person)
+        TabItem("teacher_more", "المزيد", Icons.Outlined.GridView, Icons.Filled.GridView)
     )
 }
 
 @Composable
-fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ciLogin: Pair<String, String>? = null, selfTest: Boolean = false) {
+fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ciLogin: Pair<String, String>? = null, selfTest: Boolean = false, ciViewerPass: String? = null, ciTry: String? = null) {
     val user by container.auth.currentUser.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var splash by remember { mutableStateOf(autoLogin == null && ciLogin == null) }
-    LaunchedEffect(Unit) { delay(900); splash = false }
+    LaunchedEffect(Unit) { delay(1400); splash = false }
 
+    var ciDone by remember { mutableStateOf(ciLogin == null) }
     LaunchedEffect(autoLogin) {
-        val phone = when (autoLogin) {
-            "admin" -> DemoSeed.ADMIN_PHONE
-            "teacher" -> DemoSeed.TEACHER_PHONE
-            "student" -> DemoSeed.STUDENT_PHONE
-            "parent" -> DemoSeed.PARENT_PHONE
-            else -> null
-        }
-        if (phone != null && container.auth.currentUser.value?.phone != phone) {
-            container.auth.signIn(phone, DemoSeed.DEMO_PASSWORD)
+        // Debug/demo only: CI opens a role directly for screenshots.
+        when (autoLogin) {
+            "viewer" -> container.auth.signIn(DemoSeed.VIEWER_PASSWORD, null)
+            "admin" -> { container.auth.signIn(DemoSeed.VIEWER_PASSWORD, null); container.auth.signIn(DemoSeed.ADMIN_PASSWORD, Role.ADMIN) }
+            "teacher" -> { container.auth.signIn(DemoSeed.VIEWER_PASSWORD, null); container.auth.signIn(DemoSeed.TEACHER_PASSWORD, Role.TEACHER) }
+            "gate" -> container.auth.signOut()
         }
         if (ciLogin != null) {
-            val r = container.auth.signIn(ciLogin.first, ciLogin.second)
+            val kind = when (ciLogin.first) { "admin" -> Role.ADMIN; "teacher" -> Role.TEACHER; else -> null }
+            if (kind != null && container.auth.currentUser.value?.role != Role.VIEWER) {
+                ciViewerPass?.let { container.auth.signIn(it, null) }
+            }
+            val r = container.auth.signIn(ciLogin.second, kind)
+            ciDone = true
             android.util.Log.i("ALSIDDIQ_SELFTEST", "login " + (if (r.isSuccess) "ok role=" + r.getOrNull()?.role else "fail " + r.exceptionOrNull()?.message))
         }
     }
@@ -109,7 +106,7 @@ fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ci
                 state == "login" -> Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0), snackbarHost = { SnackbarHost(snackbar) }) { pad ->
                     Box(Modifier.padding(pad)) { LoginScreen() }
                 }
-                else -> user?.let { MainShell(it, snackbar, if (autoLogin != null || ciLogin != null) startRoute else null, selfTest) }
+                else -> user?.let { MainShell(it, snackbar, if (autoLogin != null || ciLogin != null) startRoute else null, selfTest && ciDone, ciTry) }
             }
         }
     }
@@ -117,17 +114,30 @@ fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ci
 
 @Composable
 private fun Splash() {
+    // The ORIGINAL logo, never redrawn: it fades and scales in under a soft gold glow, then the welcome line.
+    val appear = remember { androidx.compose.animation.core.Animatable(0f) }
+    val glow = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) {
+        appear.animateTo(1f, tween(650))
+        glow.animateTo(1f, tween(500))
+    }
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Image(painterResource(R.drawable.logo), "شعار مركز الصديق", Modifier.size(180.dp))
-            Spacer(Modifier.height(18.dp))
-            CircularProgressIndicator(color = Brand.Navy, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+            Box(contentAlignment = Alignment.Center) {
+                Box(Modifier.size(230.dp).graphicsLayer { alpha = glow.value * 0.9f }.background(
+                    androidx.compose.ui.graphics.Brush.radialGradient(listOf(Brand.Gold.copy(alpha = 0.35f), androidx.compose.ui.graphics.Color.Transparent)), androidx.compose.foundation.shape.CircleShape))
+                Image(painterResource(R.drawable.logo), "شعار مركز الصديق",
+                    Modifier.size(180.dp).graphicsLayer { alpha = appear.value; scaleX = 0.86f + 0.14f * appear.value; scaleY = 0.86f + 0.14f * appear.value })
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("أهلاً بكم في مركز الصديق", style = MaterialTheme.typography.titleMedium, color = Brand.Navy, modifier = Modifier.graphicsLayer { alpha = glow.value })
+            Text("لتعليم القرآن الكريم", style = MaterialTheme.typography.bodySmall, color = Brand.Maroon, modifier = Modifier.graphicsLayer { alpha = glow.value })
         }
     }
 }
 
 @Composable
-private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: String?, selfTest: Boolean = false) {
+private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: String?, selfTest: Boolean = false, ciTry: String? = null) {
     val nav = rememberNavController()
     val tabs = remember(user.role) { tabsFor(user.role) }
     val entry by nav.currentBackStackEntryAsState()
@@ -149,7 +159,7 @@ private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: Str
     // Fresh data from the central database as soon as the main screen opens.
     LaunchedEffect(user.id) { runCatching { container.center.refresh() } }
     // Debug-only end-to-end check used by CI against the real database.
-    if (selfTest) LaunchedEffect(user.id) { com.alsiddiq.app.ui.SelfTest.run(container, user) }
+    if (selfTest) LaunchedEffect(user.id) { com.alsiddiq.app.ui.SelfTest.run(container, user, ciTry) }
     // Android 13+: ask once for permission to show notifications (absence, new hifz, announcements).
     if (container.cloudConfigured && android.os.Build.VERSION.SDK_INT >= 33) {
         val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -219,22 +229,29 @@ private fun AppNavHost(nav: NavHostController, user: Member) {
             when (user.role) {
                 Role.ADMIN -> AdminHome(user, nav)
                 Role.TEACHER -> TeacherHome(user, nav)
-                Role.STUDENT -> StudentHome(user, nav)
-                Role.PARENT -> ParentHome(user, nav)
+                Role.VIEWER -> ViewerHome(user, nav)
             }
         }
         composable("circles") { CirclesScreen(user, nav) }
         composable("students") { StudentsScreen(user, nav, circleFilter = null) }
         composable("reports") { ReportsScreen(user, nav) }
         composable("more") { MoreScreen(user, nav) }
+        composable("teacher_more") { TeacherMoreScreen(user, nav) }
+        composable("viewer_settings") { ViewerSettingsScreen(user, nav) }
+        composable("role_login/{kind}") {
+            val kind = if (it.arguments?.getString("kind") == "TEACHER") Role.TEACHER else Role.ADMIN
+            com.alsiddiq.app.ui.auth.RoleLoginScreen(kind) { nav.popBackStack() }
+        }
+        composable("teachers") { TeachersScreen(user, nav) }
+        composable("teacher_edit/{id}") { TeacherEditScreen(user, nav, it.arguments?.getString("id") ?: "new") }
+        composable("passwords") { PasswordsScreen(user, nav) }
+        composable("circle_report/{id}") { CircleReportScreen(user, nav, it.arguments?.getString("id") ?: "") }
         composable("record_start") { RecordStartScreen(user, nav) }
         composable("attendance") { AttendanceScreen(user, nav, null) }
         composable("attendance/{circleId}") { AttendanceScreen(user, nav, it.arguments?.getString("circleId")) }
-        composable("profile") { ProfileScreen(user, nav, onBack = if (user.role == Role.ADMIN) back else null) }
-        composable("history") { HistoryScreen(user, nav, user.studentId, onBack = null) }
         composable("history/{sid}") { HistoryScreen(user, nav, it.arguments?.getString("sid"), onBack = back) }
-        composable("rewards") { RewardsScreen(user, nav, onBack = if (user.role == Role.STUDENT) null else back) }
-        composable("notifications") { NotificationsScreen(user, nav, onBack = if (user.role == Role.STUDENT || user.role == Role.PARENT) null else back) }
+        composable("rewards") { RewardsScreen(user, nav, onBack = back) }
+        composable("notifications") { NotificationsScreen(user, nav, onBack = back) }
         composable("circle/{id}") { CircleDetailScreen(user, nav, it.arguments?.getString("id") ?: "") }
         composable("circle_edit/{id}") { CircleEditScreen(user, nav, it.arguments?.getString("id") ?: "new") }
         composable("student/{id}") { StudentDetailScreen(user, nav, it.arguments?.getString("id") ?: "") }
@@ -243,10 +260,6 @@ private fun AppNavHost(nav: NavHostController, user: Member) {
             arguments = listOf(navArgument("circle") { type = NavType.StringType; nullable = true; defaultValue = null })
         ) { StudentEditScreen(user, nav, it.arguments?.getString("id") ?: "new", it.arguments?.getString("circle")) }
         composable("record/{sid}") { RecordScreen(user, nav, it.arguments?.getString("sid") ?: "") }
-        composable("members/{role}") { MembersScreen(user, nav, Role.valueOf(it.arguments?.getString("role") ?: "TEACHER")) }
-        composable("member_edit/{role}/{id}") {
-            MemberEditScreen(user, nav, Role.valueOf(it.arguments?.getString("role") ?: "TEACHER"), it.arguments?.getString("id") ?: "new")
-        }
         composable("announcements") { AnnouncementsScreen(user, nav) }
         composable("announce_new") { AnnounceNewScreen(user, nav) }
         composable("settings") { CenterSettingsScreen(user, nav) }

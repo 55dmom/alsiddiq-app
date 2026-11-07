@@ -24,6 +24,7 @@ data class DemoStore(
     val data: CenterSnapshot,
     val passwordHashes: Map<String, String>,
     val currentUserId: String? = null,
+    val baseUserId: String? = null,
     val seedVersion: Int = DemoSeed.VERSION
 )
 
@@ -43,6 +44,9 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
     override val mode = BackendMode.DEMO
     private val _user = MutableStateFlow(store.data.member(store.currentUserId))
     override val currentUser: StateFlow<Member?> = _user.asStateFlow()
+    private val _base = MutableStateFlow(store.data.member(store.baseUserId))
+    override val baseUser: StateFlow<Member?> = _base.asStateFlow()
+    override val centerName: StateFlow<String> = MutableStateFlow(store.data.center.name)
     private val _snapshot = MutableStateFlow(visibleTo(_user.value))
     override val snapshot: StateFlow<CenterSnapshot> = _snapshot.asStateFlow()
     private val _sync = MutableStateFlow<SyncState>(SyncState.LocalOnly)
@@ -64,14 +68,13 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
     private fun visibleTo(user: Member?): CenterSnapshot {
         val all = store.data
         if (user == null) return CenterSnapshot(center = all.center)
-        if (user.role == Role.ADMIN) return all.copy(notifications = all.notifications.filter { it.userId == user.id })
+        if (user.role == Role.ADMIN || user.role == Role.VIEWER) return all.copy(notifications = all.notifications.filter { it.userId == user.id })
         val students = Permissions.visibleStudents(user, all)
         val ids = students.map { it.id }.toSet()
         val circles = Permissions.visibleCircles(user, all)
         val memberIds = buildSet {
             add(user.id)
             circles.mapNotNull { it.teacherId }.forEach { add(it) }
-            if (user.role == Role.TEACHER) all.members.filter { m -> m.role == Role.PARENT && m.childIds.any { it in ids } }.forEach { add(it.id) }
         }
         return CenterSnapshot(
             center = all.center,
@@ -105,39 +108,42 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
     private fun hash(s: String): String =
         MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
-    private fun normalisePhone(p: String) = p.filter { it.isDigit() }
-        .map { c -> if (c in '٠'..'٩') ('0' + (c - '٠')) else c }.joinToString("")
+    private fun normPw(p: String) = p.map { c -> if (c in '٠'..'٩') ('0' + (c - '٠')) else c }.joinToString("").trim()
 
-    // ---------------- Auth ----------------
-    override suspend fun signIn(login: String, password: String): Result<Member> = lock.withLock {
-        val key = normalisePhone(login)
-        val m = store.data.members.firstOrNull { normalisePhone(it.phone) == key && key.isNotEmpty() }
-            ?: return Result.failure(ValidationError("لا يوجد حساب بهذا الرقم"))
-        if (!m.active) return Result.failure(ValidationError("هذا الحساب موقوف، راجع إدارة المركز"))
-        if (store.passwordHashes[m.id] != hash(password)) return Result.failure(ValidationError("كلمة المرور غير صحيحة"))
-        store = store.copy(currentUserId = m.id)
+    // ---------------- Auth (one password field; the password decides who you are) ----------------
+    override suspend fun signIn(password: String, kind: Role?): Result<Member> = lock.withLock {
+        val h = hash(normPw(password))
+        val m = store.data.members.firstOrNull { it.active && store.passwordHashes[it.id] == h && (kind == null || it.role == kind) }
+            ?: return Result.failure(ValidationError("كلمة السر غير صحيحة"))
+        val cur = _user.value
+        val base = if (kind != null && cur?.role == Role.VIEWER && m.role != Role.VIEWER) cur else if (kind != null) _base.value else null
+        store = store.copy(currentUserId = m.id, baseUserId = base?.id)
         persist()
         _user.value = m
+        _base.value = base
         _snapshot.value = visibleTo(m)
         Result.success(m)
     }
 
-    override suspend fun signOut() {
+    override suspend fun leaveRole() {
         lock.withLock {
-            store = store.copy(currentUserId = null)
+            val base = _base.value
+            store = store.copy(currentUserId = base?.id, baseUserId = null)
             persist()
-            _user.value = null
-            _snapshot.value = visibleTo(null)
+            _user.value = base
+            _base.value = null
+            _snapshot.value = visibleTo(base)
         }
     }
 
-    override suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> = lock.withLock {
-        val u = _user.value ?: return Result.failure(PermissionDenied())
-        if (store.passwordHashes[u.id] != hash(oldPassword)) return Result.failure(ValidationError("كلمة المرور الحالية غير صحيحة"))
-        if (newPassword.length < 6) return Result.failure(ValidationError("كلمة المرور 6 أحرف على الأقل"))
-        store = store.copy(passwordHashes = store.passwordHashes + (u.id to hash(newPassword)))
-        persist()
-        Result.success(Unit)
+    override suspend fun signOut() {
+        lock.withLock {
+            store = store.copy(currentUserId = null, baseUserId = null)
+            persist()
+            _user.value = null
+            _base.value = null
+            _snapshot.value = visibleTo(null)
+        }
     }
 
     override suspend fun refresh(): Result<Unit> {
@@ -150,35 +156,42 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
         require(Permissions.canManageCenter(u)); d.copy(center = info) to Unit
     }
 
-    override suspend fun createMember(m: NewMember): Result<Member> = lock.withLock {
+    override suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member> = lock.withLock {
         val u = _user.value ?: return Result.failure(PermissionDenied())
         if (!Permissions.canManageMembers(u)) return Result.failure(PermissionDenied())
-        val phone = normalisePhone(m.phone)
-        if (m.fullName.isBlank()) return Result.failure(ValidationError("اكتب الاسم"))
-        if (phone.length < 8) return Result.failure(ValidationError("رقم الجوال غير صحيح"))
-        if (store.data.members.any { normalisePhone(it.phone) == phone }) return Result.failure(ValidationError("هذا الرقم مسجّل مسبقاً"))
-        if (m.password.length < 6) return Result.failure(ValidationError("كلمة المرور 6 أحرف على الأقل"))
-        val member = Member(newId(), m.fullName.trim(), phone, m.role, true, m.studentId, m.childIds)
+        if (name.isBlank()) return Result.failure(ValidationError("اكتب اسم المعلم"))
+        val pw = password?.let { normPw(it) }?.takeIf { it.isNotEmpty() }
+        if (id == null && pw == null) return Result.failure(ValidationError("اختر كلمة سر للمعلم"))
+        if (pw != null && pw.length < 6) return Result.failure(ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل"))
+        if (pw != null && store.passwordHashes.any { (mid, ph) -> mid != id && ph == hash(pw) }) return Result.failure(ValidationError("كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها"))
+        val d = store.data
+        val m = d.member(id)?.copy(fullName = name.trim(), active = true) ?: Member(newId(), name.trim(), "", Role.TEACHER)
         store = store.copy(
-            data = store.data.copy(members = store.data.members + member),
-            passwordHashes = store.passwordHashes + (member.id to hash(m.password))
+            data = d.copy(
+                members = if (d.members.any { it.id == m.id }) d.members.map { if (it.id == m.id) m else it } else d.members + m,
+                circles = d.circles.map { when { it.id == circleId -> it.copy(teacherId = m.id); it.teacherId == m.id -> it.copy(teacherId = null); else -> it } }
+            ),
+            passwordHashes = if (pw != null) store.passwordHashes + (m.id to hash(pw)) else store.passwordHashes
         )
         persist()
         _snapshot.value = visibleTo(u)
-        Result.success(member)
+        Result.success(m)
     }
 
-    override suspend fun updateMember(m: Member) = mutate { d, u ->
+    override suspend fun removeTeacher(id: String) = mutate { d, u ->
         require(Permissions.canManageMembers(u))
-        if (m.id == u.id && m.role != u.role) throw ValidationError("لا يمكنك تغيير دورك بنفسك")
-        d.copy(members = d.members.map { if (it.id == m.id) m else it }) to Unit
+        d.copy(members = d.members.map { if (it.id == id) it.copy(active = false) else it },
+            circles = d.circles.map { if (it.teacherId == id) it.copy(teacherId = null) else it }) to Unit
     }
 
-    override suspend fun resetMemberPassword(memberId: String, newPassword: String): Result<Unit> = lock.withLock {
+    override suspend fun setAccessPassword(target: Role, password: String): Result<Unit> = lock.withLock {
         val u = _user.value ?: return Result.failure(PermissionDenied())
         if (!Permissions.canManageMembers(u)) return Result.failure(PermissionDenied())
-        if (newPassword.length < 6) return Result.failure(ValidationError("كلمة المرور 6 أحرف على الأقل"))
-        store = store.copy(passwordHashes = store.passwordHashes + (memberId to hash(newPassword)))
+        val pw = normPw(password)
+        if (pw.length < 6) return Result.failure(ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل"))
+        val acc = store.data.members.firstOrNull { it.role == target && it.active } ?: return Result.failure(ValidationError("الحساب غير موجود"))
+        if (store.passwordHashes.any { (mid, ph) -> mid != acc.id && ph == hash(pw) }) return Result.failure(ValidationError("كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها"))
+        store = store.copy(passwordHashes = store.passwordHashes + (acc.id to hash(pw)))
         persist()
         Result.success(Unit)
     }
@@ -200,7 +213,8 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
     }
 
     override suspend fun saveStudent(s: Student) = mutate { d, u ->
-        require(Permissions.canManageStudents(u))
+        val existing = d.student(s.id)
+        require(if (existing == null) Permissions.canAddStudentTo(u, s.circleId, d) else Permissions.canEditStudent(u, existing, d) && Permissions.canAddStudentTo(u, s.circleId, d))
         if (s.fullName.isBlank()) throw ValidationError("اكتب اسم الطالب")
         val saved = if (s.id.isBlank()) s.copy(id = newId()) else s
         val list = if (d.students.any { it.id == saved.id }) d.students.map { if (it.id == saved.id) saved else it } else d.students + saved
@@ -213,8 +227,7 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
             students = d.students.filterNot { it.id == id },
             recitations = d.recitations.filterNot { it.studentId == id },
             attendance = d.attendance.filterNot { it.studentId == id },
-            rewards = d.rewards.filterNot { it.studentId == id },
-            members = d.members.map { m -> m.copy(childIds = m.childIds - id) }
+            rewards = d.rewards.filterNot { it.studentId == id }
         ) to Unit
     }
 
@@ -246,7 +259,7 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
         val added = marks.map { (sid, st) -> Attendance(newId(), sid, circleId, day, st, u.id) }
         val notes = marks.filter { it.value == AttendanceStatus.ABSENT }.flatMap { (sid, _) ->
             val s = d.student(sid)
-            notify(d, d.parentsOf(sid).map { it.id }, "غياب ${s?.fullName ?: ""}", "سُجّل غياب في ${circle.name} بتاريخ $day", "absence", sid)
+            notify(d, recipientsFor(d, sid), "غياب ${s?.fullName ?: ""}", "سُجّل غياب في ${circle.name} بتاريخ $day", "absence", sid)
         }
         d.copy(attendance = kept + added, notifications = d.notifications + notes) to added.size
     }
@@ -285,7 +298,7 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
     }
 
     private fun recipientsFor(d: CenterSnapshot, studentId: String): List<String> =
-        d.parentsOf(studentId).map { it.id } + d.members.filter { it.role == Role.STUDENT && it.studentId == studentId }.map { it.id }
+        d.members.filter { it.role == Role.ADMIN }.map { it.id }
 
     private fun notify(d: CenterSnapshot, userIds: List<String>, title: String, body: String, kind: String, ref: String?) =
         userIds.distinct().map { AppNotification(newId(), it, title, body, kind, ref) }

@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.alsiddiq.app.R
 import com.alsiddiq.app.core.Quran
 import com.alsiddiq.app.data.BackendMode
-import com.alsiddiq.app.data.NewMember
 import com.alsiddiq.app.domain.*
 import com.alsiddiq.app.ui.LocalContainer
 import com.alsiddiq.app.ui.rememberActions
@@ -56,12 +55,12 @@ fun ReportsScreen(user: Member, nav: NavHostController) {
     val visible = Permissions.visibleStudents(user, snap)
     val circles = Permissions.visibleCircles(user, snap)
     // Scope: whole center / one circle (staff) or one child (parent)
-    val scopeOptions = if (user.role == Role.PARENT) visible.map { it.fullName } else listOf("المركز كاملاً") + circles.map { it.name }
+    val scopeOptions = if (user.role == Role.VIEWER && false) visible.map { it.fullName } else listOf("المركز كاملاً") + circles.map { it.name }
     var scopeIdx by remember { mutableIntStateOf(0) }
     var rangeIdx by remember { mutableIntStateOf(1) }
     val ranges = listOf(7L to "أسبوع", 30L to "شهر", 90L to "3 أشهر")
     val students = when {
-        user.role == Role.PARENT -> listOfNotNull(visible.getOrNull(scopeIdx))
+        user.role == Role.VIEWER && false -> listOfNotNull(visible.getOrNull(scopeIdx))
         scopeIdx == 0 -> visible
         else -> visible.filter { it.circleId == circles.getOrNull(scopeIdx - 1)?.id }
     }
@@ -116,7 +115,7 @@ fun ReportsScreen(user: Member, nav: NavHostController) {
                 DonutChart(Grade.entries.map { g -> Slice(g.label, recs.count { it.grade == g }.toFloat(), gradeColor(g)) }, centerText = "${recs.size}")
             }
         }
-        if (user.role != Role.PARENT) {
+        if (user.role != Role.VIEWER && false) {
             item { SectionHeader("ترتيب الطلاب حسب الحفظ") }
             val ranked = students.map { s -> s to recs.filter { it.studentId == s.id && it.kind == RecordKind.HIFZ }.sumOf { Stats.ayatOf(it) } }
                 .sortedByDescending { it.second }
