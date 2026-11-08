@@ -9,7 +9,7 @@ import kotlin.random.Random
 
 /** Sample data for design and testing only. Never used once the central database is connected. */
 object DemoSeed {
-    const val VERSION = 9
+    const val VERSION = 10
     /** Demo passwords (sample data only): general view, admin, and (v3.3) each teacher's own password. */
     const val VIEWER_PASSWORD = "111111"
     const val ADMIN_PASSWORD = "222222"
@@ -105,11 +105,19 @@ object DemoSeed {
             AppNotification("x4", tAcc.id, "إعلان: تحديث خطة المراجعة", "اعتماد مراجعة جزء كامل أسبوعياً.", "announcement", "n3", true, now - 6 * 86_400_000L),
             AppNotification("x5", admin.id, "مرحباً بك في مركز الصديق", "هذه نسخة تجريبية ببيانات نموذجية.", "info", null, false, now)
         )
+        // v3.6: two sample teacher actions for the admin's bell (one dismissed student kept apart).
+        val gone = Student("s19", "رائد الحربي", phone = "0500000119", birthYear = 2012, circleId = "c3", joinedOn = today.minusDays(30).toString(),
+            goalJuz = 3, active = false, dismissedAt = now - 3 * 3_600_000L, dismissedBy = t3.id)
+        val events = listOf(
+            AdminEvent("e2", "student_dismissed", t3.id, n3, gone.id, gone.fullName, "حلقة البراعم", "c3", gone.phone, now - 3 * 3_600_000L),
+            AdminEvent("e1", "student_added", t1.id, n1, "s1", students[0].fullName, circles[0].name, "c1", students[0].phone, now - 26 * 3_600_000L, readAt = now - 20 * 3_600_000L)
+        )
         val data = CenterSnapshot(
             center = CenterInfo(),
             members = members, circles = circles, students = students,
             recitations = recs, attendance = att, rewards = rewards,
-            announcements = announcements, notifications = notes, teacherNames = teacherNames
+            announcements = announcements, notifications = notes, teacherNames = teacherNames,
+            dismissed = listOf(gone), events = events
         )
         val hashes = mapOf(admin.id to h(ADMIN_PASSWORD), viewer.id to h(VIEWER_PASSWORD), t1.id to h(TEACHER_PASSWORD), t2.id to h("333332"), t3.id to h("333333"))
         return DemoStore(data, hashes, null, null, VERSION)

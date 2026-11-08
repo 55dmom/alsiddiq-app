@@ -123,10 +123,25 @@ fun NotificationsScreen(user: Member, nav: NavHostController, onBack: (() -> Uni
     val actions = rememberActions()
     val repo = LocalContainer.current.center
     val list = snap.notifications.sortedByDescending { it.createdAt }
+    // v3.6: the admin's «تنبيهات المعلمين» (a teacher registered or dismissed a student), newest first.
+    val events = if (Permissions.canSeeEvents(user)) snap.events.sortedByDescending { it.createdAt } else emptyList()
     ScreenList("الإشعارات", onBack = onBack, actions = {
-        if (list.any { !it.read }) TextButton(onClick = { actions.run("تم تعليم الكل كمقروء", { repo.markAllNotificationsRead() }) }) { Text("قراءة الكل") }
+        if (list.any { !it.read } || events.any { it.unread }) TextButton(onClick = {
+            actions.run("تم تعليم الكل كمقروء", {
+                val a = if (list.any { !it.read }) repo.markAllNotificationsRead() else Result.success(Unit)
+                if (events.any { it.unread }) repo.markEventsRead(null) else a
+            })
+        }) { Text("قراءة الكل") }
     }) {
-        if (list.isEmpty()) item { EmptyState("لا توجد إشعارات", "ستصلك هنا تحديثات الحفظ والحضور والإعلانات") }
+        if (events.isNotEmpty()) {
+            item { SectionHeader("تنبيهات المعلمين") }
+            items(events, key = { "ev_" + it.id }) { e -> AdminEventRow(e, snap) {
+                if (e.unread) actions.run(null, { repo.markEventsRead(e.id) })
+                if (e.studentId != null && snap.student(e.studentId) != null) nav.navigate("student/${e.studentId}")
+            } }
+            if (list.isNotEmpty()) item { SectionHeader("الإشعارات") }
+        }
+        if (list.isEmpty() && events.isEmpty()) item { EmptyState("لا توجد إشعارات", "ستصلك هنا تحديثات الحفظ والحضور والإعلانات") }
         items(list, key = { it.id }) { n ->
             val icon = when (n.kind) {
                 "record" -> Icons.Outlined.AutoStories
@@ -157,6 +172,34 @@ fun NotificationsScreen(user: Member, nav: NavHostController, onBack: (() -> Uni
                     if (!n.read) Box(Modifier.padding(top = 6.dp).size(9.dp).clip(CircleShape).background(Brand.Maroon))
                 }
             }
+        }
+    }
+}
+
+
+/** «الأستاذ عبدالله سجّل طالب: محمد أحمد — حلقة النور». */
+fun adminEventText(e: AdminEvent): String {
+    val who = e.actorName.trim().let { n -> if (n.isEmpty()) "معلم" else if (n.startsWith("الأستاذ") || n.startsWith("الشيخ") || n.startsWith("الإدارة")) n else "الأستاذ $n" }
+    val verb = if (e.kind == "student_dismissed") "فصل" else "سجّل"
+    return "$who $verb طالب: ${e.studentName}" + (if (e.circleName.isNotBlank()) " — ${e.circleName}" else "")
+}
+
+@Composable
+private fun AdminEventRow(e: AdminEvent, snap: CenterSnapshot, onClick: () -> Unit) {
+    val added = e.kind != "student_dismissed"
+    val tint = if (added) Brand.Green else Brand.Red
+    AppCard(padding = 12.dp, onClick = onClick) {
+        Row(verticalAlignment = Alignment.Top) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = if (e.unread) 0.16f else 0.08f)), contentAlignment = Alignment.Center) {
+                Icon(if (added) Icons.Outlined.PersonAdd else Icons.Outlined.PersonRemove, null, tint = tint)
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(adminEventText(e), style = MaterialTheme.typography.titleSmall, fontWeight = if (e.unread) FontWeight.Bold else FontWeight.Medium)
+                if (e.phone.isNotBlank()) Text("الجوال: ${e.phone}", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                Text(Fmt.relative(e.createdAt), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+            }
+            if (e.unread) Box(Modifier.padding(top = 6.dp).size(9.dp).clip(CircleShape).background(Brand.Maroon))
         }
     }
 }

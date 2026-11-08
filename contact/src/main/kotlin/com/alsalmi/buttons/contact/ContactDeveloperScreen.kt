@@ -63,7 +63,10 @@ internal object CtInfo {
 }
 
 /** One contact row: label, what is shown, the link it opens, and what «نسخ» copies. */
-internal class CtLink(val label: String, val shown: String, val url: String, val copy: String, val color: Color, val icon: @Composable (Color) -> Unit)
+internal class CtLink(val label: String, val shown: String, val url: String, val copy: String, val color: Color, val ready: Boolean = true, val icon: @Composable (Color) -> Unit)
+
+/** A contact not filled in yet (still the placeholder): the row shows «قريباً» and opens or copies nothing. */
+internal fun ctReady(v: String) = v.isNotBlank() && v !in setOf("INSTAGRAM_USER", "EMAIL_ADDRESS", "TELEGRAM_USER")
 
 internal val Instagram = Color(0xFFD62976)
 internal val EmailColor = Color(0xFFB0532F)
@@ -81,9 +84,9 @@ internal fun ctLinks(): List<CtLink> {
     val tg = CtInfo.TELEGRAM.trim().removePrefix("@")
     val mail = CtInfo.EMAIL.trim()
     return listOf(
-        CtLink("انستجرام", "@$ig", "https://instagram.com/$ig", "@$ig", Instagram) { Icon(InstaIcon, null, tint = it, modifier = Modifier.size(24.dp)) },
-        CtLink("الإيميل", mail, "mailto:$mail", mail, EmailColor) { Icon(Icons.Filled.Email, null, tint = it, modifier = Modifier.size(24.dp)) },
-        CtLink("تيليجرام", "@$tg", "https://t.me/$tg", "@$tg", Telegram) {
+        CtLink("انستجرام", if (ctReady(ig)) "@$ig" else "قريباً", "https://instagram.com/$ig", "@$ig", Instagram, ctReady(ig)) { Icon(InstaIcon, null, tint = it, modifier = Modifier.size(24.dp)) },
+        CtLink("الإيميل", if (ctReady(mail)) mail else "قريباً", "mailto:$mail", mail, EmailColor, ctReady(mail)) { Icon(Icons.Filled.Email, null, tint = it, modifier = Modifier.size(24.dp)) },
+        CtLink("تيليجرام", if (ctReady(tg)) "@$tg" else "قريباً", "https://t.me/$tg", "@$tg", Telegram, ctReady(tg)) {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Icon(Icons.AutoMirrored.Filled.Send, null, tint = it, modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = -25f })
             }
@@ -205,8 +208,8 @@ fun ContactDeveloperScreen(onBack: (() -> Unit)? = null) {
                         ) {
                             Text(CtInfo.BODY, color = c.sub, fontSize = 16.sp, textAlign = TextAlign.Center, lineHeight = 24.sp)
                             ctLinks().forEach { l ->
-                                ContactRow(l, c, copied = copiedKey == l.label, onOpen = { openLink(ctx, l.url) }) {
-                                    copyText(ctx, l.copy); copiedKey = l.label; copied = true
+                                ContactRow(l, c, copied = copiedKey == l.label, onOpen = { if (l.ready) openLink(ctx, l.url) }) {
+                                    if (l.ready) { copyText(ctx, l.copy); copiedKey = l.label; copied = true }
                                 }
                             }
                         }
@@ -244,18 +247,18 @@ private fun PressButton(onClick: () -> Unit, modifier: Modifier, bg: Color, shap
 
 @Composable
 private fun ContactRow(l: CtLink, c: CtColors, copied: Boolean, onOpen: () -> Unit, onCopy: () -> Unit) {
-    PressButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), bg = c.soft.copy(alpha = 0.55f), shape = RoundedCornerShape(16.dp)) {
+    PressButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).alpha(if (l.ready) 1f else 0.6f), bg = c.soft.copy(alpha = 0.55f), shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(l.color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { l.icon(l.color) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(l.label, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                if (l.ready) CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     Text(l.shown, color = c.sub, fontSize = 13.sp, maxLines = 1, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End)
-                }
+                } else Text(l.shown, color = c.sub, fontSize = 13.sp, maxLines = 1)
             }
             Spacer(Modifier.width(8.dp))
-            IconButton(onClick = onCopy) {
+            if (l.ready) IconButton(onClick = onCopy) {
                 Icon(if (copied) Icons.Filled.Check else CopyIcon, contentDescription = "نسخ", tint = l.color, modifier = Modifier.size(20.dp))
             }
         }

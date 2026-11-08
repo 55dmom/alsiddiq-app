@@ -114,6 +114,10 @@ class SupabaseApi(private val baseUrl: String, private val publicKey: String) {
             mapOf("Prefer" to (if (ignore) "resolution=ignore-duplicates" else "resolution=merge-duplicates") + ",return=minimal"))
     }
 
+    suspend fun insert(token: String, table: String, body: JsonElement) {
+        ok("POST", "/rest/v1/$table", token, body, mapOf("Prefer" to "return=minimal"))
+    }
+
     suspend fun patch(token: String, table: String, filter: String, body: JsonElement) {
         ok("PATCH", "/rest/v1/$table?$filter", token, body, mapOf("Prefer" to "return=minimal"))
     }

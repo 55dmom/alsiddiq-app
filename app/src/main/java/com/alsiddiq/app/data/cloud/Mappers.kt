@@ -42,8 +42,32 @@ internal object Rows {
         id = o.s("id")!!, fullName = o.s("full_name") ?: "", phone = o.s("phone") ?: "", birthYear = o.i("birth_year"),
         circleId = o.s("circle_id"), joinedOn = o.s("joined_on") ?: "", goalJuz = o.i("goal_juz") ?: 5,
         status = enumOf(o.s("status"), StudentStatus.ACTIVE), notes = o.s("notes") ?: "", createdAt = ts(o.s("created_at")),
-        photoPath = o.s("photo_path")
+        photoPath = o.s("photo_path"),
+        active = o.b("active") ?: true, dismissedAt = o.s("dismissed_at")?.let { ts(it) }, dismissedBy = o.s("dismissed_by")
     )
+
+    /** «المتفوقون» honor_cards row (students is a jsonb array). */
+    fun honorCard(o: JsonObject): HonorCard {
+        val arr = o["students"] as? JsonArray ?: JsonArray(emptyList())
+        return HonorCard(
+            id = o.s("id")!!, message = o.s("message") ?: "", publishedBy = o.s("published_by"), createdAt = ts(o.s("created_at")),
+            students = arr.mapNotNull { e -> (e as? JsonObject)?.let { j -> HonorStudent(j.s("id") ?: "", j.s("full_name") ?: "", j.s("photo_path"), j.s("circle_name") ?: "", j.s("score_text") ?: "") } }
+        )
+    }
+    fun honorCardRow(students: List<HonorStudent>, message: String, center: String, by: String) = buildJsonObject {
+        put("center_id", center); put("message", message.ifBlank { null })
+        put("students", JsonArray(students.map { h -> buildJsonObject { put("id", h.id); put("full_name", h.fullName); put("photo_path", h.photoPath); put("circle_name", h.circleName); put("score_text", h.scoreText) } }))
+    }
+
+    /** v3.6 admin_events row (the student snapshot is jsonb). */
+    fun event(o: JsonObject): AdminEvent {
+        val st = o["student"] as? JsonObject ?: JsonObject(emptyMap())
+        return AdminEvent(
+            id = o.s("id")!!, kind = o.s("kind") ?: "", actorId = o.s("actor_profile_id"), actorName = o.s("actor_name") ?: "",
+            studentId = o.s("student_id"), studentName = st.s("full_name") ?: "", circleName = st.s("circle_name") ?: "",
+            circleId = o.s("circle_id"), phone = st.s("phone") ?: "", createdAt = ts(o.s("created_at")), readAt = o.s("read_at")?.let { ts(it) }
+        )
+    }
     fun studentRow(s: Student, center: String) = buildJsonObject {
         put("id", s.id); put("center_id", center); put("full_name", s.fullName); put("phone", s.phone)
         put("birth_year", s.birthYear); put("circle_id", s.circleId); put("joined_on", s.joinedOn.ifBlank { java.time.LocalDate.now().toString() })

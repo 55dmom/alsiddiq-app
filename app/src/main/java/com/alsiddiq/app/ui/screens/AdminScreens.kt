@@ -55,12 +55,14 @@ fun AdminHome(user: Member, nav: NavHostController) {
     val demo = isDemo()
     val stats = remember(snap) { Stats.forCenter(snap, snap.students) }
     val today = LocalDate.now()
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    // His request (Nov 8): a faint Islamic background on the home screen, in the theme's colour (not inside his tools).
+    LazyColumn(Modifier.fillMaxSize().islamicBackdrop(Brand.Navy), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             HomeHeader(
                 "السلام عليكم ورحمة الله", snap.center.name,
                 Fmt.dayTitle(today) + " • " + Fmt.hijri(today),
-                snap.notifications.count { !it.read }
+                // v3.6: the bell also counts the teachers' new actions (registered / dismissed a student).
+                snap.notifications.count { !it.read } + snap.events.count { it.unread }
             ) { nav.navigate("notifications") }
         }
         item {
@@ -200,6 +202,7 @@ fun MoreScreen(user: Member, nav: NavHostController) {
         item { ThemesMenuItem() }
         item { com.alsiddiq.app.ui.about.CenterInfoEntries() }
         item { SectionHeader("المتابعة") }
+        item { MenuRow("المتفوقون", "ترتيب تلقائي من التقارير • اظهر تفوق الطالب", Icons.Outlined.EmojiEvents, Brand.Gold) { nav.navigate("honors") } }
         item { MenuRow("الحضور والغياب", "تسجيل ومراجعة الحضور", Icons.Outlined.FactCheck) { nav.navigate("attendance") } }
         items(snap.circles.sortedBy { it.name }.take(6)) { c -> MenuRow("تقرير ${c.name}", "كم حفظوا ومن غاب", Icons.Outlined.Summarize, Brand.Gold) { nav.navigate("circle_report/${c.id}") } }
         item { MenuRow("المكافآت والنقاط", "لوحة الشرف ومنح النقاط", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }

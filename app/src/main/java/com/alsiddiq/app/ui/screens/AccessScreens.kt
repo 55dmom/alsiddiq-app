@@ -61,7 +61,8 @@ fun ViewerHome(user: Member, nav: NavHostController) {
     val totalJuz = per.sumOf { it.second.juzEquivalent }
     val today = LocalDate.now()
     val reports = snap.announcements.sortedByDescending { it.createdAt }.take(3)
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    // His request (Nov 8): a faint Islamic background on the home screen, in the theme's colour (not inside his tools).
+    LazyColumn(Modifier.fillMaxSize().islamicBackdrop(Brand.Navy), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             HomeHeader("السلام عليكم ورحمة الله", snap.center.name, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }
@@ -173,6 +174,7 @@ fun ViewerSettingsScreen(user: Member, nav: NavHostController) {
         item { ThemesMenuItem() }
         item { com.alsiddiq.app.ui.about.CenterInfoEntries() }
         item { SectionHeader("عام") }
+        item { MenuRow("المتفوقون", "أعلى الطلاب حسب تقاريرهم", Icons.Outlined.EmojiEvents, Brand.Gold) { nav.navigate("honors") } }
         item { MenuRow("التقارير والإعلانات", "${snap.announcements.size} منشور", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
         item { MenuRow("عن التطبيق", "الإصدار وحالة المزامنة", Icons.Outlined.Info) { nav.navigate("about") } }
@@ -220,6 +222,7 @@ fun TeacherMoreScreen(user: Member, nav: NavHostController) {
         item { MenuRow("طالب جديد", "إضافة سجل طالب في حلقتك", Icons.Outlined.PersonAdd) { nav.navigate("student_edit/new" + (mine.firstOrNull()?.let { "?circle=${it.id}" } ?: "")) } }
         item { MenuRow("كل الحلقات", "عرض فقط: حلقات المعلمين الآخرين وطلابهم", Icons.Outlined.Groups) { nav.navigate("circles") } }
         item { MenuRow("التقارير والإحصائيات", "رسوم الحلقات", Icons.Outlined.Insights) { nav.navigate("reports") } }
+        item { MenuRow("المتفوقون", "أعلى الطلاب حسب تقاريرهم", Icons.Outlined.EmojiEvents, Brand.Gold) { nav.navigate("honors") } }
         item { MenuRow("المكافآت", "منح النقاط ولوحة الشرف", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
         item { MenuRow("الإعلانات", "إعلانات المركز", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }

@@ -77,6 +77,12 @@ interface CenterRepository {
     suspend fun deleteCircle(id: String): Result<Unit>
     suspend fun saveStudent(s: Student): Result<Student>
     suspend fun deleteStudent(id: String): Result<Unit>
+    /** v3.6 «فصل الطالب»: soft delete (admin anywhere, a teacher in his own circle). The server logs it for the admin. */
+    suspend fun dismissStudent(id: String): Result<Unit>
+    /** «المتفوقون» → «اظهر تفوق الطالب»: the admin publishes a congratulation card (online). */
+    suspend fun publishHonorCard(students: List<HonorStudent>, message: String): Result<Unit>
+    /** v3.6: mark one admin event read (null = all). */
+    suspend fun markEventsRead(id: String?): Result<Unit>
 
     // Teaching
     suspend fun logRecitation(r: Recitation): Result<Recitation>

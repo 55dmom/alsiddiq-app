@@ -38,13 +38,19 @@ import com.alsiddiq.app.data.BackendMode
 import com.alsiddiq.app.data.demo.DemoSeed
 import com.alsiddiq.app.domain.Role
 import com.alsiddiq.app.ui.LocalContainer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.alsiddiq.app.ui.components.islamicPatternOverlay
 import com.alsiddiq.app.ui.components.DemoBanner
 import com.alsiddiq.app.ui.theme.Brand
 import kotlinx.coroutines.launch
 
 /** One password field, nothing else. The password itself decides who you are. */
 @Composable
-fun PasswordField(value: String, onChange: (String) -> Unit, label: String, onDone: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun PasswordField(value: String, onChange: (String) -> Unit, label: String, onDone: (() -> Unit)? = null, modifier: Modifier = Modifier, glass: Boolean = false) {
     var show by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = value, onValueChange = onChange,
@@ -60,16 +66,43 @@ fun PasswordField(value: String, onChange: (String) -> Unit, label: String, onDo
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = if (onDone != null) ImeAction.Done else ImeAction.Next),
         keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }),
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp)
+        shape = RoundedCornerShape(14.dp),
+        colors = if (!glass) OutlinedTextFieldDefaults.colors() else OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = Color(0xFFF3DD9A),
+            focusedBorderColor = Color(0xFFD4AF5A), unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
+            focusedLabelColor = Color(0xFFF3DD9A), unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+            focusedLeadingIconColor = Color(0xFFF3DD9A), unfocusedLeadingIconColor = Color.White.copy(alpha = 0.75f),
+            focusedTrailingIconColor = Color.White, unfocusedTrailingIconColor = Color.White.copy(alpha = 0.75f))
     )
+}
+
+/** His request (Nov 8, 4:38 PM): «صفحة تسجيل الدخول الأولى خليها فخمة مو تقليدية». */
+private val Amiri = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.amiri_bold, FontWeight.Bold))
+private val GateGold = listOf(Color(0xFFF3DD9A), Color(0xFFD4AF5A), Color(0xFFB08A34))
+private val GateNight = Color(0xFF05070C)
+
+/** A thin gold ornament: line — diamond — line. */
+@Composable
+private fun GoldDivider(width: androidx.compose.ui.unit.Dp = 150.dp) {
+    Row(Modifier.width(width), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, GateGold[1]))))
+        Box(Modifier.padding(horizontal = 6.dp).size(7.dp).graphicsLayer { rotationZ = 45f }.background(GateGold[1]))
+        Box(Modifier.weight(1f).height(1.dp).background(Brush.horizontalGradient(listOf(GateGold[1], Color.Transparent))))
+    }
 }
 
 @Composable
 private fun GateFrame(onBack: (() -> Unit)? = null, tools: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     val name by LocalContainer.current.auth.centerName.collectAsState()
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Brand.Navy, Brand.NavyDark, Brand.Bg), endY = 1500f))) {
+    // a soft entrance (fade + slide up, about 400 ms)
+    val enter = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) { enter.animateTo(1f, androidx.compose.animation.core.tween(420)) }
+    Box(Modifier.fillMaxSize()
+        .background(Brush.verticalGradient(listOf(Brand.NavyDark, lerp(Brand.NavyDark, GateNight, 0.65f), GateNight)))
+        .islamicPatternOverlay(GateGold[1], 0.07f)) {
         Column(
-            Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp).imePadding(),
+            Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp).imePadding()
+                .graphicsLayer { alpha = enter.value; translationY = (1f - enter.value) * 40.dp.toPx() },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (onBack != null) {
@@ -85,13 +118,22 @@ private fun GateFrame(onBack: (() -> Unit)? = null, tools: Boolean = false, cont
                 }
                 Spacer(Modifier.height(8.dp))
             } else Spacer(Modifier.height(52.dp))
-            Box(Modifier.size(132.dp).clip(RoundedCornerShape(36.dp)).background(Color.White), contentAlignment = Alignment.Center) {
-                Image(painterResource(R.drawable.logo), "شعار مركز الصديق", Modifier.size(118.dp))
+            // the logo in a soft gold ring with a glow
+            Box(Modifier.size(172.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.matchParentSize().background(Brush.radialGradient(listOf(GateGold[1].copy(alpha = 0.32f), Color.Transparent))))
+                Box(Modifier.size(140.dp).clip(CircleShape).background(Brush.sweepGradient(GateGold + GateGold.first())).padding(3.dp)
+                    .clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
+                    Image(painterResource(R.drawable.logo), "شعار مركز الصديق", Modifier.size(112.dp))
+                }
             }
-            Spacer(Modifier.height(16.dp))
-            Text(name.ifBlank { "مركز الصديق لتعليم القرآن الكريم" }, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
-            Box(Modifier.padding(top = 8.dp).width(56.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Brand.Gold))
-            Spacer(Modifier.height(26.dp))
+            Spacer(Modifier.height(10.dp))
+            GoldDivider()
+            Spacer(Modifier.height(8.dp))
+            Text(name.ifBlank { "مركز الصديق لتعليم القرآن الكريم" }, fontFamily = Amiri, fontWeight = FontWeight.Bold, fontSize = 30.sp, lineHeight = 46.sp,
+                color = Color.White, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(8.dp))
+            GoldDivider(110.dp)
+            Spacer(Modifier.height(24.dp))
             com.alsiddiq.app.ui.components.OccasionBanner(Modifier.padding(bottom = 14.dp))
             content()
             Spacer(Modifier.height(30.dp))
@@ -121,20 +163,28 @@ fun LoginScreen() {
         }
     }
     GateFrame(tools = true) {
-        Surface(shape = RoundedCornerShape(26.dp), color = Brand.Card, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp)) {
-                Text("أدخل كلمة السر", style = MaterialTheme.typography.titleLarge)
-                Text("لعرض الطلاب والنتائج والتقارير", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+        // a frosted-glass card with a gold hairline border, and a gold login button
+        Surface(shape = RoundedCornerShape(26.dp), color = Color.White.copy(alpha = 0.10f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Brush.verticalGradient(listOf(GateGold[0].copy(alpha = 0.85f), GateGold[2].copy(alpha = 0.45f)))),
+            modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.06f), Color.Transparent))).padding(20.dp)) {
+                Text("أدخل كلمة السر", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("لعرض الطلاب والنتائج والتقارير", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.72f))
                 Spacer(Modifier.height(16.dp))
-                PasswordField(pass, { pass = it; error = null }, "كلمة السر", onDone = { submit() })
-                if (error != null) { Spacer(Modifier.height(8.dp)); Text(error!!, color = Brand.Red, style = MaterialTheme.typography.bodySmall) }
+                CompositionLocalProvider(LocalContentColor provides Color.White) {
+                    PasswordField(pass, { pass = it; error = null }, "كلمة السر", onDone = { submit() }, glass = true)
+                }
+                if (error != null) { Spacer(Modifier.height(8.dp)); Text(error!!, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall) }
                 Spacer(Modifier.height(18.dp))
-                Button(onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) {
-                    if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                    else Text("دخول", style = MaterialTheme.typography.titleMedium)
+                Button(onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(Brush.horizontalGradient(GateGold)),
+                    shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color(0xFF2A1E05), disabledContainerColor = Color.Transparent)) {
+                    if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Color(0xFF2A1E05), strokeWidth = 2.dp)
+                    else Text("دخول", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("كلمة السر تحصل عليها من إدارة المركز", style = MaterialTheme.typography.bodySmall, color = Brand.Muted,
+                Text("كلمة السر تحصل عليها من إدارة المركز", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.72f),
                     textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
@@ -161,7 +211,7 @@ fun LoginScreen() {
         if (demo) {
             Spacer(Modifier.height(18.dp)); DemoBanner(); Spacer(Modifier.height(8.dp))
             Text("نسخة تجريبية: العرض ${DemoSeed.VIEWER_PASSWORD} • الإدارة ${DemoSeed.ADMIN_PASSWORD} • معلم ${DemoSeed.TEACHER_PASSWORD}",
-                style = MaterialTheme.typography.bodySmall, color = Brand.Muted, textAlign = TextAlign.Center)
+                style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center)
         }
     }
 }

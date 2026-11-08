@@ -215,4 +215,41 @@ st 44_tools_menu_bottom default --es demo_login gate --es open_tool menu
 adb shell input swipe 540 1800 540 500 400; sleep 1.5; adb exec-out screencap -p > shots/44_tools_menu_bottom.png
 st 44b_night_about night --es demo_login gate --es open_tool about
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/43_about.crash.txt; [ -s shots/43_about.crash.txt ] || rm -f shots/43_about.crash.txt
+# His request (4:38 PM): faint Islamic background on the home screens (2 themes) and the luxurious opening screen
+st 58_home_islamic_bg_admin default --es demo_login admin --es route home
+st 58b_home_islamic_bg_viewer_sand sand --es demo_login viewer --es route home
+st 58c_home_islamic_bg_teacher_night night --es demo_login teacher --es route home
+adb shell am force-stop $PKG; adb shell pm clear $PKG >/dev/null; adb shell am start -n $PKG/$ACT; sleep 9; nodlg; adb exec-out screencap -p > shots/58d_gate_luxury.png
+adb shell input swipe 540 1700 540 700 400; sleep 1.2; adb exec-out screencap -p > shots/58e_gate_luxury_scrolled.png
+# v2 tasbeeh and asma (his new modules, exactly as given): opened full screen, a few taps, the backgrounds sheet
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool tasbeeh; sleep 12; adb exec-out screencap -p > shots/59_v2_tasbeeh.png
+for k in 1 2 3 4 5; do adb shell input tap 540 1300; sleep 0.35; done; sleep 1; adb exec-out screencap -p > shots/59b_v2_tasbeeh_counted.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool tasbeeh; sleep 10; adb exec-out screencap -p > shots/59b2_v2_tasbeeh_reopened_next_bg.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool asma; sleep 12; adb exec-out screencap -p > shots/59c_v2_asma.png
+for k in 1 2 3 4 5 6 7 8 9 10 11; do adb shell input tap 540 1100; sleep 0.5; done; sleep 1.5; adb exec-out screencap -p > shots/59d_v2_asma_12.png
+tapt "كل الأسماء"; sleep 2; adb exec-out screencap -p > shots/59e_v2_asma_all_names.png
+adb shell am force-stop $PKG
+# his contact screen: 3 rows; rows without his values yet show «قريباً»
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool developer; sleep 8; adb exec-out screencap -p > shots/60_contact_developer.png
+# v3.6: the admin's bell for teachers' actions (sample data), a teacher dismisses his own student, then the admin sees it
+adb logcat -c
+st 55_admin_home_bell default --es demo_login admin --es route home
+st 55b_admin_bell_list default --es demo_login admin --es route notifications
+tapt "الأستاذ ياسر القحطاني فصل طالب: رائد الحربي — حلقة البراعم"; sleep 3; adb exec-out screencap -p > shots/55c_admin_event_opens_student.png
+st 56_teacher_student_dismiss default --es demo_login teacher --es route student/s5
+adb shell input swipe 540 1900 540 300 400; sleep 0.8; adb shell input swipe 540 1900 540 300 400; sleep 1.5; adb exec-out screencap -p > shots/56b_teacher_dismiss_button.png
+tapt "فصل الطالب"; sleep 1.5; adb exec-out screencap -p > shots/56c_teacher_dismiss_confirm.png
+tapt "فصل"; sleep 2.5; adb exec-out screencap -p > shots/56d_teacher_dismissed.png
+st 56e_admin_bell_after default --es demo_login admin --es route notifications
+# «المتفوقون»: automatic ranking (everyone), the admin's «اظهر تفوق الطالب», then the card on the next open
+st 57_honors_viewer default --es demo_login viewer --es route honors
+tapt "الشهر"; sleep 0.5; tapt "الكل"; sleep 1.5; adb exec-out screencap -p > shots/57b_honors_all_time.png
+tapt "حلقة أبي بكر الصديق"; sleep 1.5; adb exec-out screencap -p > shots/57c_honors_circle.png
+st 57d_honors_admin default --es demo_login admin --es route honors
+tapt "اظهر تفوق الطالب"; sleep 1.5; adb exec-out screencap -p > shots/57e_honor_publish_dialog.png
+tapt "نشر"; sleep 2.5; adb exec-out screencap -p > shots/57f_honor_published.png
+st 57g_honor_card_viewer default --es demo_login viewer --es route home
+tapt "شكراً"; sleep 1.5; adb exec-out screencap -p > shots/57g2_honor_card_closed.png
+st 57h_honor_card_not_again default --es demo_login viewer --es route home
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/55_v36.crash.txt; [ -s shots/55_v36.crash.txt ] || rm -f shots/55_v36.crash.txt
 ls -la shots

@@ -60,7 +60,8 @@ fun TeacherHome(user: Member, nav: NavHostController) {
     val today = LocalDate.now()
     val logged = snap.recitations.filter { Stats.dayOf(it.recordedAt) == today }.map { it.studentId }.toSet()
     val pending = students.filter { it.id !in logged }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    // His request (Nov 8): a faint Islamic background on the home screen, in the theme's colour (not inside his tools).
+    LazyColumn(Modifier.fillMaxSize().islamicBackdrop(Brand.Navy), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             HomeHeader("السلام عليكم", user.fullName, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }

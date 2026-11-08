@@ -218,6 +218,8 @@ private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: Str
             AppNavHost(nav, user)
         }
     }
+    // «المتفوقون»: a newly published congratulation card, once, on everyone's screen.
+    com.alsiddiq.app.ui.screens.HonorPopupHost()
 }
 
 @Composable
@@ -245,6 +247,7 @@ private fun AppNavHost(nav: NavHostController, user: Member) {
         composable("teacher_more") { TeacherMoreScreen(user, nav) }
         composable("viewer_settings") { ViewerSettingsScreen(user, nav) }
         composable("tools") { com.alsiddiq.app.ui.components.ToolsTabScreen() }
+        composable("honors") { com.alsiddiq.app.ui.screens.HonorsScreen(user, nav) }
         composable("role_login/{kind}") {
             val kind = if (it.arguments?.getString("kind") == "TEACHER") Role.TEACHER else Role.ADMIN
             com.alsiddiq.app.ui.auth.RoleLoginScreen(kind) { nav.popBackStack() }

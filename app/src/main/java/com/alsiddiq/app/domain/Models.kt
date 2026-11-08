@@ -59,8 +59,38 @@ data class Student(
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     /** v3.1: path of the photo in the private bucket 'student-photos' (null = no photo). */
-    val photoPath: String? = null
+    val photoPath: String? = null,
+    /** v3.6: «فصل» is a soft delete: the row stays, active = false, with when and by whom. */
+    val active: Boolean = true,
+    val dismissedAt: Long? = null,
+    val dismissedBy: String? = null
 )
+
+/** «المتفوقون»: a congratulation card the admin published (everyone sees it once, full screen, on the next app open). */
+@Serializable
+data class HonorStudent(val id: String, val fullName: String, val photoPath: String? = null, val circleName: String = "", val scoreText: String = "")
+
+@Serializable
+data class HonorCard(val id: String, val students: List<HonorStudent>, val message: String = "", val publishedBy: String? = null, val createdAt: Long = 0)
+
+/** v3.6: what a teacher did, for the admin («الأستاذ عبدالله سجّل طالب: محمد أحمد — حلقة النور»). Written by the server only. */
+@Serializable
+data class AdminEvent(
+    val id: String,
+    /** student_added | student_dismissed */
+    val kind: String,
+    val actorId: String? = null,
+    val actorName: String = "",
+    val studentId: String? = null,
+    val studentName: String = "",
+    val circleName: String = "",
+    val circleId: String? = null,
+    val phone: String = "",
+    val createdAt: Long = 0,
+    val readAt: Long? = null
+) {
+    val unread get() = readAt == null
+}
 
 @Serializable
 enum class RecordKind(val label: String, val short: String) {
@@ -171,11 +201,17 @@ data class CenterSnapshot(
     val rewards: List<Reward> = emptyList(),
     val announcements: List<Announcement> = emptyList(),
     val notifications: List<AppNotification> = emptyList(),
-    val teacherNames: List<TeacherName> = emptyList()
+    val teacherNames: List<TeacherName> = emptyList(),
+    /** v3.6: dismissed students (kept apart, so every list, count and report shows only the active ones). */
+    val dismissed: List<Student> = emptyList(),
+    /** v3.6: only the admin reads these. */
+    val events: List<AdminEvent> = emptyList(),
+    /** «المتفوقون»: the published congratulation cards, newest first. */
+    val honorCards: List<HonorCard> = emptyList()
 ) {
     fun member(id: String?): Member? = members.firstOrNull { it.id == id }
     fun circle(id: String?): Circle? = circles.firstOrNull { it.id == id }
-    fun student(id: String?): Student? = students.firstOrNull { it.id == id }
+    fun student(id: String?): Student? = students.firstOrNull { it.id == id } ?: dismissed.firstOrNull { it.id == id }
     fun studentsIn(circleId: String): List<Student> = students.filter { it.circleId == circleId }
     /** v3.1: teachers are names only (the admin's list). Old per-teacher accounts still count if there are no names. */
     fun teachers(): List<Member> = members.filter { it.role == Role.TEACHER && it.active && !it.allCircles }

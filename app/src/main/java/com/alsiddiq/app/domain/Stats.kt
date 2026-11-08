@@ -123,6 +123,26 @@ object Stats {
         )
     }
 
+    /** «المتفوقون»: one student's results over a period, from the same records the reports use. */
+    data class Honor(val student: Student, val hifzPages: Double, val ayat: Int, val avgGrade: Double, val attendance: Float, val records: Int, val score: Double)
+
+    /**
+     * Ranks students for «المتفوقون» over [since] (null = all time), on the phone, from the synced data:
+     * new memorisation (pages, as in the reports) first, then the average grade and attendance. Students with nothing recorded are left out.
+     */
+    fun honors(snap: CenterSnapshot, students: List<Student>, since: LocalDate?): List<Honor> = students.mapNotNull { s ->
+        val recs = snap.recitations.filter { it.studentId == s.id && (since == null || !dayOf(it.recordedAt).isBefore(since)) }
+        if (recs.isEmpty()) return@mapNotNull null
+        val hifz = recs.filter { it.kind == RecordKind.HIFZ && it.grade != Grade.WEAK }
+        val pages = hifz.sumOf { pagesOf(it) }
+        val att = snap.attendance.filter { it.studentId == s.id && (since == null || runCatching { !LocalDate.parse(it.day).isBefore(since) }.getOrDefault(true)) }
+        val counted = att.count { it.status != AttendanceStatus.EXCUSED }
+        val present = att.count { it.status == AttendanceStatus.PRESENT || it.status == AttendanceStatus.LATE }
+        val rate = if (counted == 0) 0f else present.toFloat() / counted
+        val grade = recs.map { it.grade.score }.average()
+        Honor(s, pages, recs.sumOf { ayatOf(it) }, grade, rate, recs.size, pages * 10 + grade * 4 + rate * 10)
+    }.sortedWith(compareByDescending<Honor> { it.score }.thenByDescending { it.ayat })
+
     fun describeRange(r: Recitation): String =
         if (r.fromSurah == r.toSurah) "${Quran.name(r.fromSurah)} ${r.fromAyah}–${r.toAyah}"
         else "${Quran.name(r.fromSurah)} ${r.fromAyah} إلى ${Quran.name(r.toSurah)} ${r.toAyah}"

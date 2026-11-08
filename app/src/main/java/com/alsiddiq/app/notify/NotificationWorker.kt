@@ -23,6 +23,8 @@ class NotificationWorker(ctx: Context, params: WorkerParameters) : CoroutineWork
         val repo = (applicationContext as AlSiddiqApp).container.cloud ?: return Result.success()
         if (!repo.isSignedIn()) return Result.success()
         val fresh = runCatching { repo.fetchNewNotifications() }.getOrElse { return Result.retry() }
+        // v3.6: the admin's «تنبيهات المعلمين» — checked when this runs (app open / sync), not a push.
+        val events = runCatching { repo.fetchNewAdminEvents() }.getOrDefault(emptyList())
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return Result.success()
@@ -43,6 +45,19 @@ class NotificationWorker(ctx: Context, params: WorkerParameters) : CoroutineWork
                 .setAutoCancel(true)
                 .build()
             try { nm.notify(n.id.hashCode(), notif) } catch (_: SecurityException) {}
+        }
+        events.take(5).forEach { e ->
+            val text = com.alsiddiq.app.ui.screens.adminEventText(e)
+            val notif = NotificationCompat.Builder(applicationContext, CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_notify)
+                .setColor(0xFF282564.toInt())
+                .setContentTitle("تنبيه من المعلمين")
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .build()
+            try { nm.notify(("ev" + e.id).hashCode(), notif) } catch (_: SecurityException) {}
         }
         return Result.success()
     }

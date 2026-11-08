@@ -261,7 +261,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         lock.withLock { st = st.copy(centerId = center ?: st.centerId); save() }
         runCatching { syncNow() }
         // Don't raise phone notifications for what was already waiting before this sign-in.
-        lock.withLock { st = st.copy(seenNotificationIds = st.cache.notifications.map { it.id }); save() }
+        lock.withLock { st = st.copy(seenNotificationIds = st.cache.notifications.map { it.id } + st.cache.events.map { "ev:" + it.id }); save() }
         publish()
         return st.me ?: me
     }
@@ -350,6 +350,9 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             val ann = async { api.selectAll(t, "announcements", "select=*&order=created_at.desc") }
             val notes = async { api.selectAll(t, "notifications", "select=*&user_id=eq.${me.id}&order=created_at.desc") }
             val names = async { runCatching { api.selectAll(t, "teacher_names", "select=*&order=name") }.getOrDefault(emptyList()) }
+            val honors = async { runCatching { api.selectAll(t, "honor_cards", "select=*&order=created_at.desc") }.getOrDefault(emptyList()) }
+            // v3.6: only the admin reads the teachers' actions.
+            val events = async { if (me.role != Role.ADMIN) emptyList() else runCatching { api.selectAll(t, "admin_events", "select=*&order=created_at.desc") }.getOrDefault(emptyList()) }
             val members = profiles.await().map { Rows.member(it) }.map { if (it.id == me.id) it.copy(allCircles = me.allCircles) else it }
             if (members.none { it.id == me.id }) {
                 // v3.1: my own profile is unreadable = this login was ended on the server (password changed).
@@ -358,11 +361,15 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
                 token()
                 return@coroutineScope
             }
+            val allStudents = students.await().map { Rows.student(it) }
             val fresh = CenterSnapshot(
                 center = centers.await().firstOrNull()?.let { Rows.center(it) } ?: CenterInfo(),
                 members = members,
                 circles = circles.await().map { Rows.circle(it) },
-                students = students.await().map { Rows.student(it) },
+                students = allStudents.filter { it.active },
+                dismissed = allStudents.filterNot { it.active },
+                events = events.await().map { Rows.event(it) },
+                honorCards = honors.await().map { Rows.honorCard(it) },
                 recitations = recs.await().map { Rows.recitation(it) },
                 attendance = att.await().map { Rows.attendance(it) },
                 rewards = rewards.await().map { Rows.reward(it) },
@@ -389,10 +396,17 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             return freshL.map { mine[id(it)] ?: it } + mine.values.filter { m -> freshL.none { id(it) == id(m) } }
         }
         val deleted = st.outbox.filter { it.type == "delete" }.mapNotNull { Regex("id=eq\\.([^&]+)").find(it.filter)?.groupValues?.get(1) }.toSet()
+        // v3.6: a «فصل» / «إرجاع» still waiting keeps the student where the user put him.
+        fun activeSet(v: Boolean) = st.outbox.filter { it.type == "patch" && it.table == "students" && runCatching { json.parseToJsonElement(it.body).jsonObject["active"]?.jsonPrimitive?.booleanOrNull == v }.getOrDefault(false) }
+            .mapNotNull { Regex("id=eq\\.([^&]+)").find(it.filter)?.groupValues?.get(1) }.toSet()
+        val dismissing = activeSet(false)
+        val restoring = activeSet(true)
         return fresh.copy(
             recitations = over(fresh.recitations, old.recitations) { it.id }.filterNot { it.id in deleted },
             rewards = over(fresh.rewards, old.rewards) { it.id }.filterNot { it.id in deleted },
-            students = over(fresh.students, old.students) { it.id }.filterNot { it.id in deleted },
+            students = over(fresh.students, old.students) { it.id }.filterNot { it.id in deleted || it.id in dismissing },
+            dismissed = fresh.dismissed.filterNot { it.id in restoring } + old.dismissed.filter { it.id in dismissing && fresh.dismissed.none { f -> f.id == it.id } },
+            events = if (st.outbox.none { it.table == "admin_events" }) fresh.events else fresh.events.map { e -> old.events.firstOrNull { it.id == e.id }?.readAt?.let { r -> e.copy(readAt = r) } ?: e },
             circles = over(fresh.circles, old.circles) { it.id }.filterNot { it.id in deleted },
             announcements = over(fresh.announcements, old.announcements) { it.id }.filterNot { it.id in deleted },
             attendance = over(fresh.attendance, old.attendance) { SyncPolicy.attendanceKey(it.studentId, it.day) }
@@ -695,6 +709,46 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         write(PendingOp(type = "upsert", table = "students", body = Rows.studentRow(saved, center()).toString(), keys = listOf(saved.id), label = "الطالب ${saved.fullName}"), saved) { d ->
             d.copy(students = if (d.students.any { it.id == saved.id }) d.students.map { if (it.id == saved.id) saved else it } else d.students + saved)
         }
+    }
+
+    override suspend fun dismissStudent(id: String): Result<Unit> = guarded {
+        val s = st.cache.students.firstOrNull { it.id == id } ?: throw ValidationError("الطالب غير موجود")
+        require(Permissions.canDismissStudent(me(), s, st.cache))
+        val now = System.currentTimeMillis()
+        val body = buildJsonObject { put("active", false); put("dismissed_at", Rows.iso(now)); put("dismissed_by", me().id); put("updated_at", Rows.iso(now)) }
+        val gone = s.copy(active = false, dismissedAt = now, dismissedBy = me().id)
+        write(PendingOp(type = "patch", table = "students", filter = "id=eq.$id", body = body.toString(), keys = listOf(id), label = "فصل ${s.fullName}"), Unit) { d ->
+            d.copy(students = d.students.filterNot { it.id == id }, dismissed = d.dismissed.filterNot { it.id == id } + gone)
+        }
+    }
+
+    override suspend fun publishHonorCard(students: List<HonorStudent>, message: String): Result<Unit> = guarded {
+        require(me().role == Role.ADMIN)
+        if (students.isEmpty()) throw ValidationError("اختر طالباً واحداً على الأقل")
+        try { api.insert(token(), "honor_cards", Rows.honorCardRow(students, message.trim(), center(), me().id)) }
+        catch (e: OfflineException) { throw ValidationError("نشر التهنئة يحتاج اتصالاً بالإنترنت") }
+        runCatching { syncNow() }
+        Result.success(Unit)
+    }
+
+    override suspend fun markEventsRead(id: String?): Result<Unit> = guarded {
+        require(me().role == Role.ADMIN)
+        val now = System.currentTimeMillis()
+        val filter = if (id == null) "read_at=is.null" else "id=eq.$id"
+        write(PendingOp(type = "patch", table = "admin_events", filter = filter, body = buildJsonObject { put("read_at", Rows.iso(now)) }.toString(), label = "تنبيهات المعلمين"), Unit) { d ->
+            d.copy(events = d.events.map { if ((id == null || it.id == id) && it.readAt == null) it.copy(readAt = now) else it })
+        }
+    }
+
+    /** v3.6: teachers' new actions since the last check, for a local notification when the app syncs (not a push). */
+    suspend fun fetchNewAdminEvents(): List<AdminEvent> {
+        val u = st.me ?: return emptyList()
+        if (u.role != Role.ADMIN) return emptyList()
+        val rows = runCatching { api.selectAll(token(), "admin_events", "select=*&read_at=is.null&order=created_at.desc").map { Rows.event(it) } }.getOrDefault(emptyList())
+        val seen = st.seenNotificationIds.toSet()
+        val fresh = rows.filter { "ev:" + it.id !in seen }
+        lock.withLock { st = st.copy(seenNotificationIds = (rows.map { "ev:" + it.id } + st.seenNotificationIds).distinct().take(500)); save() }
+        return fresh
     }
 
     override suspend fun deleteStudent(id: String): Result<Unit> = guarded {

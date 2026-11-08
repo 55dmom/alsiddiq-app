@@ -71,6 +71,7 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         // v3.3: teachers read the whole centre too (they edit only their own circle).
         if (user.role == Role.ADMIN || user.role == Role.VIEWER || user.role == Role.TEACHER) return all.copy(
             notifications = all.notifications.filter { it.userId == user.id },
+            events = if (user.role == Role.ADMIN) all.events else emptyList(),
             announcements = all.announcements.filter { Permissions.audienceIncludes(it.audience, user.role) })
         val students = Permissions.visibleStudents(user, all)
         val ids = students.map { it.id }.toSet()
@@ -263,7 +264,32 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         if (s.fullName.isBlank()) throw ValidationError("اكتب اسم الطالب")
         val saved = if (s.id.isBlank()) s.copy(id = newId()) else s
         val list = if (d.students.any { it.id == saved.id }) d.students.map { if (it.id == saved.id) saved else it } else d.students + saved
-        d.copy(students = list) to saved
+        // v3.6 (the server's trigger does this for real): a teacher's new student shows on the admin's bell.
+        val ev = if (existing == null && u.role == Role.TEACHER) AdminEvent(newId(), "student_added", u.id, u.fullName, saved.id, saved.fullName,
+            d.circle(saved.circleId)?.name ?: "", saved.circleId, saved.phone, System.currentTimeMillis()) else null
+        d.copy(students = list, events = listOfNotNull(ev) + d.events) to saved
+    }
+
+    override suspend fun dismissStudent(id: String) = mutate { d, u ->
+        val s = d.students.firstOrNull { it.id == id } ?: throw ValidationError("الطالب غير موجود")
+        require(Permissions.canDismissStudent(u, s, d))
+        val now = System.currentTimeMillis()
+        val gone = s.copy(active = false, dismissedAt = now, dismissedBy = u.id)
+        val ev = if (u.role == Role.TEACHER) AdminEvent(newId(), "student_dismissed", u.id, u.fullName, s.id, s.fullName,
+            d.circle(s.circleId)?.name ?: "", s.circleId, s.phone, now) else null
+        d.copy(students = d.students.filterNot { it.id == id }, dismissed = d.dismissed + gone, events = listOfNotNull(ev) + d.events) to Unit
+    }
+
+    override suspend fun publishHonorCard(students: List<HonorStudent>, message: String) = mutate { d, u ->
+        require(u.role == Role.ADMIN)
+        if (students.isEmpty()) throw ValidationError("اختر طالباً واحداً على الأقل")
+        d.copy(honorCards = listOf(HonorCard(newId(), students, message.trim(), u.id, System.currentTimeMillis())) + d.honorCards) to Unit
+    }
+
+    override suspend fun markEventsRead(id: String?) = mutate { d, u ->
+        require(u.role == Role.ADMIN)
+        val now = System.currentTimeMillis()
+        d.copy(events = d.events.map { if ((id == null || it.id == id) && it.readAt == null) it.copy(readAt = now) else it }) to Unit
     }
 
     override suspend fun deleteStudent(id: String) = mutate { d, u ->

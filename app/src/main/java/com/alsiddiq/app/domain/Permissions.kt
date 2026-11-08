@@ -34,6 +34,15 @@ object Permissions {
         Role.VIEWER -> false
     }
 
+    /** v3.6 «فصل الطالب»: the admin anywhere, a teacher only in his own circle. */
+    fun canDismissStudent(user: Member, student: Student, snap: CenterSnapshot) = student.active && when (user.role) {
+        Role.ADMIN -> true
+        Role.TEACHER -> teachesCircle(user, snap.circle(student.circleId))
+        Role.VIEWER -> false
+    }
+    /** v3.6: only the admin reads the teachers' actions. */
+    fun canSeeEvents(user: Member) = user.role == Role.ADMIN
+
     fun canRecordFor(user: Member, student: Student, snap: CenterSnapshot): Boolean = when (user.role) {
         Role.ADMIN -> true
         Role.TEACHER -> teachesCircle(user, snap.circle(student.circleId))

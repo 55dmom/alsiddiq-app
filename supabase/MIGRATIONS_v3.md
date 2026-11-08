@@ -379,3 +379,44 @@ SQL `0012_v35_circle_fees.sql` (additive, no rows written).
 Teacher (owner of the circle) and viewer read the fee, every fee write = 0 rows (RLS); admin sets the fee and the period;
 negative fee refused by the CHECK; with RLS bypassed and teacher claims the trigger refuses («رسوم الحلقة تحددها الإدارة فقط»);
 the service path (no user) can still update `teacher_name`.
+
+---
+
+# v3.6 — teacher registers / dismisses students, admin notifications — LIVE since 2026-11-08 ~16:40 Riyadh
+Migration `0013_v36_teacher_students.sql` (additive, idempotent; rollback-tested before and after: `server_v33/test_v36_rollback.sql`,
+`rollback_test_v36.txt`). Full client guide: `V36_TEACHER_STUDENTS.md`.
+
+## Server changes (0013)
+- `students`: new `active boolean not null default true`, `dismissed_at timestamptz`, `dismissed_by uuid → profiles(id)`.
+  Dismiss = `PATCH students?id=eq.<id>&active=eq.true {"active":false,"dismissed_at":<now>,"dismissed_by":<me>,"updated_at":<now>}`.
+  Never a delete.
+- Trigger `students_v36_guard` (BEFORE insert/update): `dismissed_by` = the caller (forged values ignored); `dismissed_at` =
+  client time if within −30 days … +5 min, else server now(); a non-admin's insert is always `active=true`; a non-admin
+  can't restore (false → true → 403 «إرجاع الطالب المفصول للإدارة فقط»); an update that doesn't change `active` keeps the
+  dismissal fields (the app's full-row upsert can't revive a dismissed student). Admin restore clears both fields.
+- New table `admin_events(id, center_id, kind in ('student_added','student_dismissed'), actor_profile_id, actor_name,
+  student_id, student jsonb, circle_id, created_at, read_at)`. Written only by trigger `students_v36_log`
+  (AFTER, SECURITY DEFINER) when a TEACHER adds a student or dismisses one (true → false). Admin actions, edits and
+  repeated dismissals are not logged. Snapshot keys: `full_name, circle_name, teacher_name, level` (circle's),
+  `phone, birth_year, joined_on, goal_juz, status, notes, photo_path`.
+- RLS on `admin_events`: SELECT admins of the centre only; UPDATE admins only and only `read_at` (column grant);
+  no INSERT/DELETE for any client. Added to `supabase_realtime`.
+- Two live policy holes found by the test and fixed: a teacher's add through PostgREST upsert / `return=representation`
+  was refused (new policy `students_teacher_read`); a teacher could move a student into another teacher's circle or to
+  none (`students_teachers_update` re-created with `is_teachers()` in its WITH CHECK).
+
+## Offline sync (v3.2 conventions)
+- The dismiss PATCH is a queued student edit: same `updated_at` last-write-wins check; it carries `updated_at` = phone time.
+- `admin_events` is read-only for the phone except `read_at`; mark-read PATCHes use `read_at=is.null`, so a replay is harmless.
+  No `updated_at` on it; the event's `created_at` is when the write reached the server.
+- Not background push (no FCM/APNs): the admin sees events on app open / sync / Realtime while open.
+
+# v3.7 — «المتفوقون» congratulation cards — LIVE since 2026-11-08 ~16:40 Riyadh
+Migration `0014_v37_honor_cards.sql` (additive, idempotent; `test_v37_rollback.sql`, `rollback_test_v37.txt`).
+- New table `honor_cards(id, center_id, title default 'المتفوقون', students jsonb array of
+  {id, full_name, photo_path, circle_name, score_text}, message, published_by default auth.uid(), created_at)`.
+- A row is a published card; the «المتفوقون» list = the newest card's students. Optional, whenever the admin wants.
+- RLS: SELECT every signed-in account of the centre (viewer included); INSERT admin only (`published_by` = himself);
+  DELETE admin only; no UPDATE. Added to `supabase_realtime`.
+- Read: `GET /rest/v1/honor_cards?select=*&order=created_at.desc&limit=20`; publish: `POST /rest/v1/honor_cards
+  {center_id, students, message, published_by}`; take down: `DELETE /rest/v1/honor_cards?id=eq.<id>`.

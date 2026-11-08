@@ -89,14 +89,19 @@ fun StudentDetailScreen(user: Member, nav: NavHostController, id: String) {
         ScreenList("الطالب", onBack = { nav.popBackStack() }) { item { EmptyState("الطالب غير موجود", "ربما حُذف أو ليست لديك صلاحية") } }
         return
     }
-    val canRecord = Permissions.canRecordFor(user, s, snap)
+    val canRecord = Permissions.canRecordFor(user, s, snap) && s.active
     ScreenList(s.fullName, onBack = { nav.popBackStack() }, actions = {
-        if (Permissions.canEditStudent(user, s, snap)) IconButton(onClick = { nav.navigate("student_edit/${s.id}") }) { Icon(Icons.Outlined.Edit, "تعديل") }
+        if (s.active && Permissions.canEditStudent(user, s, snap)) IconButton(onClick = { nav.navigate("student_edit/${s.id}") }) { Icon(Icons.Outlined.Edit, "تعديل") }
     }, fab = {
         if (canRecord) AddFab("تسجيل تسميع") { nav.navigate("record/${s.id}") }
     }) {
-        if (user.role == Role.TEACHER && !canRecord) item { ReadOnlyNote("عرض فقط: الطالب في حلقة ${snap.circle(s.circleId)?.name ?: "أخرى"}، والتعديل لمعلمها وللإدارة.") }
-        item { StudentPhotoCard(s, Permissions.canEditStudent(user, s, snap)) }
+        // v3.6: a dismissed student (opened from the admin's bell): his info stays, marked «مفصول».
+        if (!s.active) item {
+            val by = snap.member(s.dismissedBy)?.fullName
+            ReadOnlyNote("مفصول" + (s.dismissedAt?.let { " • " + Fmt.relative(it) } ?: "") + (by?.let { " • بواسطة $it" } ?: ""))
+        }
+        if (user.role == Role.TEACHER && !canRecord && s.active) item { ReadOnlyNote("عرض فقط: الطالب في حلقة ${snap.circle(s.circleId)?.name ?: "أخرى"}، والتعديل لمعلمها وللإدارة.") }
+        item { StudentPhotoCard(s, s.active && Permissions.canEditStudent(user, s, snap)) }
         studentDashboard(this, s, snap, nav, user)
     }
 }
@@ -165,10 +170,31 @@ fun studentDashboard(scope: androidx.compose.foundation.lazy.LazyListScope, s: S
                 KeyValueRow("المعلم", snap.teacherOf(snap.circle(s.circleId)) ?: "—")
                 KeyValueRow("تاريخ الالتحاق", runCatching { Fmt.date(LocalDate.parse(s.joinedOn)) }.getOrDefault(s.joinedOn))
                 if (s.birthYear != null) KeyValueRow("سنة الميلاد", "${s.birthYear}")
-                KeyValueRow("الحالة", s.status.label)
+                KeyValueRow("الحالة", if (s.active) s.status.label else "مفصول")
+                if (s.phone.isNotBlank()) KeyValueRow("الجوال", s.phone)
             }
         }
+        // v3.6 «فصل الطالب»: the admin, or the teacher of his circle. Soft: the student and his records stay; the admin is told.
+        if (Permissions.canDismissStudent(user, s, snap)) padItem(hPad, "dismiss") { DismissStudentButton(s) }
     }
+}
+
+@Composable
+private fun DismissStudentButton(s: Student) {
+    val actions = rememberActions()
+    val repo = LocalContainer.current.center
+    var ask by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { ask = true }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(50.dp), shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand.Red)) {
+        Icon(Icons.Outlined.PersonRemove, null); Spacer(Modifier.width(6.dp)); Text("فصل الطالب")
+    }
+    if (ask) AlertDialog(
+        onDismissRequest = { ask = false },
+        title = { Text("فصل ${s.fullName}؟") },
+        text = { Text("يختفي من الحلقة والقوائم، وتبقى سجلاته محفوظة، ويوصل تنبيه للإدارة.") },
+        confirmButton = { TextButton(onClick = { ask = false; actions.run("تم فصل الطالب", { repo.dismissStudent(s.id) }) }) { Text("فصل", color = Brand.Red) } },
+        dismissButton = { TextButton(onClick = { ask = false }) { Text("إلغاء") } }
+    )
 }
 
 @Composable
