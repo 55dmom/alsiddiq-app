@@ -29,7 +29,8 @@ internal object TsbColors {
 /** This button's own theme: light / dark follow the system, Arabic RTL. */
 @Composable
 internal fun TsbTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+    val host = tsbHostRead()
+    val dark = host?.dark ?: isSystemInDarkTheme()
     val scheme = if (dark) darkColorScheme(
         primary = TsbColors.accentDark,
         onPrimary = Color(0xFF00201A),
@@ -57,9 +58,15 @@ internal fun TsbTheme(content: @Composable () -> Unit) {
         surfaceContainer = Color.White,
         outlineVariant = Color(0xFFE3E8E6),
     )
-    MaterialTheme(colorScheme = scheme) {
+    val themed = if (host == null) scheme else scheme.copy(
+        primary = host.accent, onPrimary = if (host.dark) Color(0xFF0E1016) else Color.White,
+        primaryContainer = host.soft, onPrimaryContainer = host.text, secondary = host.accent2,
+        background = host.bg, onBackground = host.text, surface = host.bg, onSurface = host.text,
+        surfaceVariant = host.card, onSurfaceVariant = host.text2, surfaceContainer = host.card, outlineVariant = host.line,
+    )
+    CompositionLocalProvider(LocalTsbHost provides host) { MaterialTheme(colorScheme = themed) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { content() }
-    }
+    } }
 }
 
 @Composable
@@ -75,3 +82,22 @@ internal object TsbHaptics {
     fun tap(v: View) { v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
     fun success(v: View) { v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) }
 }
+
+
+// ===== «الثيمات» من تطبيق «مركز الصديق»: طبقة الألوان فقط، النصوص والمنطق ما تغيّرت.
+// التطبيق يكتب ألوان الثيم المختار (أو ثيم المناسبة) في «alsiddiq_theme». الثيم الأصلي أو بدون اختيار = ألوان هذا الزر الأصلية كما هي.
+internal class TsbHostColors(val dark: Boolean, val accent: Color, val accent2: Color, val bg: Color, val card: Color, val line: Color, val soft: Color, val text: Color, val text2: Color, val grad1: Color, val grad2: Color)
+internal val LocalTsbHost = androidx.compose.runtime.staticCompositionLocalOf<TsbHostColors?> { null }
+/** Reads the colours the app wrote for its tools (only when a theme other than the original is in force). */
+internal fun tsbHostFrom(sp: android.content.SharedPreferences): TsbHostColors? {
+    if (!sp.getBoolean("tools_on", false)) return null
+    fun c(k: String) = Color(sp.getInt(k, 0))
+    return TsbHostColors(sp.getBoolean("t_dark", false), c("t_accent"), c("t_accent2"), c("t_bg"), c("t_card"), c("t_line"), c("t_soft"), c("t_text"), c("t_text2"), c("t_grad1"), c("t_grad2"))
+}
+@Composable
+internal fun tsbHostRead(): TsbHostColors? {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    return androidx.compose.runtime.remember { tsbHostFrom(ctx.getSharedPreferences("alsiddiq_theme", android.content.Context.MODE_PRIVATE)) }
+}
+@Composable
+internal fun tsbDark(): Boolean = LocalTsbHost.current?.dark ?: isSystemInDarkTheme()

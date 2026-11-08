@@ -64,24 +64,25 @@ import androidx.compose.ui.unit.sp
 
 /** This button's own colours. */
 internal object DuaC {
-    val accent: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF818CF8) else Color(0xFF4338CA)
-    val accent2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFA78BFA) else Color(0xFF7C3AED)
-    val bg: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF0B0E12) else Color(0xFFF3F5F7)
-    val card: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF161A20) else Color.White
-    val line: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF262C35) else Color(0xFFE4E8EE)
-    val soft: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF2B304B) else Color(0xFFE8E7F8)
-    val text: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFE8ECF1) else Color(0xFF141A21)
-    val text2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF9AA4B1) else Color(0xFF5E6874)
-    val gold: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFF2C14E) else Color(0xFFB7791F)
-    val good: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF4ADE80) else Color(0xFF15803D)
-    val warn: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFFB923C) else Color(0xFFC2410C)
-    val gradient: Brush @Composable get() = if (isSystemInDarkTheme()) Brush.linearGradient(listOf(Color(0xFF382FAB), Color(0xFF6931C9))) else Brush.linearGradient(listOf(Color(0xFF4338CA), Color(0xFF7C3AED)))
+    val accent: Color @Composable get() = LocalDuaHost.current?.accent ?: (if (duaDark()) Color(0xFF818CF8) else Color(0xFF4338CA))
+    val accent2: Color @Composable get() = LocalDuaHost.current?.accent2 ?: (if (duaDark()) Color(0xFFA78BFA) else Color(0xFF7C3AED))
+    val bg: Color @Composable get() = LocalDuaHost.current?.bg ?: (if (duaDark()) Color(0xFF0B0E12) else Color(0xFFF3F5F7))
+    val card: Color @Composable get() = LocalDuaHost.current?.card ?: (if (duaDark()) Color(0xFF161A20) else Color.White)
+    val line: Color @Composable get() = LocalDuaHost.current?.line ?: (if (duaDark()) Color(0xFF262C35) else Color(0xFFE4E8EE))
+    val soft: Color @Composable get() = LocalDuaHost.current?.soft ?: (if (duaDark()) Color(0xFF2B304B) else Color(0xFFE8E7F8))
+    val text: Color @Composable get() = LocalDuaHost.current?.text ?: (if (duaDark()) Color(0xFFE8ECF1) else Color(0xFF141A21))
+    val text2: Color @Composable get() = LocalDuaHost.current?.text2 ?: (if (duaDark()) Color(0xFF9AA4B1) else Color(0xFF5E6874))
+    val gold: Color @Composable get() = if (duaDark()) Color(0xFFF2C14E) else Color(0xFFB7791F)
+    val good: Color @Composable get() = if (duaDark()) Color(0xFF4ADE80) else Color(0xFF15803D)
+    val warn: Color @Composable get() = if (duaDark()) Color(0xFFFB923C) else Color(0xFFC2410C)
+    val gradient: Brush @Composable get() = LocalDuaHost.current?.let { Brush.linearGradient(listOf(it.grad1, it.grad2)) } ?: (if (duaDark()) Brush.linearGradient(listOf(Color(0xFF382FAB), Color(0xFF6931C9))) else Brush.linearGradient(listOf(Color(0xFF4338CA), Color(0xFF7C3AED))))
 }
 
 /** Light / dark follow the system, Arabic RTL. */
 @Composable
 internal fun DuaTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+    val host = duaHostRead()
+    val dark = host?.dark ?: isSystemInDarkTheme()
     val scheme = if (dark) darkColorScheme(
         primary = Color(0xFF818CF8), onPrimary = Color(0xFF06121A),
         primaryContainer = Color(0xFF2B304B), onPrimaryContainer = Color(0xFFE8ECF1),
@@ -101,9 +102,15 @@ internal fun DuaTheme(content: @Composable () -> Unit) {
         surfaceContainer = Color.White, surfaceContainerHigh = Color.White,
         outlineVariant = Color(0xFFE4E8EE),
     )
-    MaterialTheme(colorScheme = scheme) {
+    val themed = if (host == null) scheme else scheme.copy(
+        primary = host.accent, onPrimary = if (host.dark) Color(0xFF0E1016) else Color.White,
+        primaryContainer = host.soft, onPrimaryContainer = host.text, secondary = host.accent2,
+        background = host.bg, onBackground = host.text, surface = host.bg, onSurface = host.text,
+        surfaceVariant = host.card, onSurfaceVariant = host.text2, surfaceContainer = host.card, outlineVariant = host.line,
+    )
+    CompositionLocalProvider(LocalDuaHost provides host) { MaterialTheme(colorScheme = themed) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { content() }
-    }
+    } }
 }
 
 /** Gentle shrink while pressed, then onClick. */
@@ -271,3 +278,22 @@ internal object DuaHaptics {
     fun tap(v: View) { v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
     fun success(v: View) { v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) }
 }
+
+
+// ===== «الثيمات» من تطبيق «مركز الصديق»: طبقة الألوان فقط، النصوص والمنطق ما تغيّرت.
+// التطبيق يكتب ألوان الثيم المختار (أو ثيم المناسبة) في «alsiddiq_theme». الثيم الأصلي أو بدون اختيار = ألوان هذا الزر الأصلية كما هي.
+internal class DuaHostColors(val dark: Boolean, val accent: Color, val accent2: Color, val bg: Color, val card: Color, val line: Color, val soft: Color, val text: Color, val text2: Color, val grad1: Color, val grad2: Color)
+internal val LocalDuaHost = androidx.compose.runtime.staticCompositionLocalOf<DuaHostColors?> { null }
+/** Reads the colours the app wrote for its tools (only when a theme other than the original is in force). */
+internal fun duaHostFrom(sp: android.content.SharedPreferences): DuaHostColors? {
+    if (!sp.getBoolean("tools_on", false)) return null
+    fun c(k: String) = Color(sp.getInt(k, 0))
+    return DuaHostColors(sp.getBoolean("t_dark", false), c("t_accent"), c("t_accent2"), c("t_bg"), c("t_card"), c("t_line"), c("t_soft"), c("t_text"), c("t_text2"), c("t_grad1"), c("t_grad2"))
+}
+@Composable
+internal fun duaHostRead(): DuaHostColors? {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    return androidx.compose.runtime.remember { duaHostFrom(ctx.getSharedPreferences("alsiddiq_theme", android.content.Context.MODE_PRIVATE)) }
+}
+@Composable
+internal fun duaDark(): Boolean = LocalDuaHost.current?.dark ?: isSystemInDarkTheme()

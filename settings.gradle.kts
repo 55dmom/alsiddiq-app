@@ -10,6 +10,7 @@ include(":app")
 // His own side buttons («الأدوات»), as independent library modules.
 include(":mushaf")
 include(":hifz")
+include(":khatma")
 include(":prayer")
 include(":adhkar")
 include(":duas")

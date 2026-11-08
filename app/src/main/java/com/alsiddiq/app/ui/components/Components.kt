@@ -172,7 +172,7 @@ fun DemoBanner(modifier: Modifier = Modifier) {
         Spacer(Modifier.width(8.dp))
         Text(
             "وضع تجريبي: البيانات محفوظة على هذا الجهاز فقط ولا تتم مزامنتها بعد",
-            style = MaterialTheme.typography.labelMedium, color = Color(0xFF7A5C14)
+            style = MaterialTheme.typography.labelMedium, color = if (Brand.palette.dark) Brand.Gold else Color(0xFF7A5C14)
         )
     }
 }

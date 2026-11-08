@@ -77,7 +77,10 @@ private fun GateFrame(onBack: (() -> Unit)? = null, tools: Boolean = false, cont
                 Spacer(Modifier.height(4.dp))
             } else if (tools) {
                 // «الأدوات»: his side buttons, open to everyone before any password.
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp)) { com.alsiddiq.app.ui.components.ToolsButton() }
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    com.alsiddiq.app.ui.components.ToolsButton()
+                    com.alsiddiq.app.ui.components.ThemesButton()
+                }
                 Spacer(Modifier.height(8.dp))
             } else Spacer(Modifier.height(52.dp))
             Box(Modifier.size(132.dp).clip(RoundedCornerShape(36.dp)).background(Color.White), contentAlignment = Alignment.Center) {
@@ -115,7 +118,7 @@ fun LoginScreen() {
         }
     }
     GateFrame(tools = true) {
-        Surface(shape = RoundedCornerShape(26.dp), color = Color.White, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
+        Surface(shape = RoundedCornerShape(26.dp), color = Brand.Card, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text("أدخل كلمة السر", style = MaterialTheme.typography.titleLarge)
                 Text("لعرض الطلاب والنتائج والتقارير", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
@@ -158,7 +161,7 @@ fun RoleLoginScreen(kind: Role, onBack: () -> Unit) {
         }
     }
     GateFrame(onBack = onBack) {
-        Surface(shape = RoundedCornerShape(26.dp), color = Color.White, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
+        Surface(shape = RoundedCornerShape(26.dp), color = Brand.Card, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(if (admin) Brand.NavySoft else Brand.MaroonSoft), contentAlignment = Alignment.Center) {
@@ -218,7 +221,7 @@ fun SetupScreen(onDone: () -> Unit) {
         }
     }
     GateFrame {
-        Surface(shape = RoundedCornerShape(26.dp), color = Color.White, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
+        Surface(shape = RoundedCornerShape(26.dp), color = Brand.Card, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text("إعداد المركز لأول مرة", style = MaterialTheme.typography.titleLarge)
                 Text("مرة واحدة فقط. كلمات السر تُحفظ مشفّرة على الخادم ولا يراها أحد.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)

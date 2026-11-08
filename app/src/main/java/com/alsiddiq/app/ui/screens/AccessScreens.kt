@@ -139,7 +139,7 @@ fun ViewerHome(user: Member, nav: NavHostController) {
 
 @Composable
 private fun BigSectionButton(title: String, sub: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, soft: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = RoundedCornerShape(22.dp), color = Color.White, shadowElevation = 2.dp,
+    Surface(onClick = onClick, shape = RoundedCornerShape(22.dp), color = Brand.Card, shadowElevation = 2.dp,
         modifier = modifier.border(1.dp, Brand.Line, RoundedCornerShape(22.dp))) {
         Column(Modifier.padding(vertical = 22.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(60.dp).clip(RoundedCornerShape(18.dp)).background(soft), contentAlignment = Alignment.Center) {
@@ -168,6 +168,8 @@ fun ViewerSettingsScreen(user: Member, nav: NavHostController) {
         }
         item { SectionHeader("الأدوات") }
         items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
+        item { SectionHeader("المظهر") }
+        item { ThemesMenuItem() }
         item { SectionHeader("عام") }
         item { MenuRow("التقارير والإعلانات", "${snap.announcements.size} منشور", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
@@ -210,6 +212,8 @@ fun TeacherMoreScreen(user: Member, nav: NavHostController) {
         else item { MenuRow("تقرير اليوم", "اختر الحلقة: كم حفظوا اليوم ومن غاب", Icons.Outlined.Summarize, Brand.Maroon) { nav.navigate("circle_report/${mine.first().id}") } }
         item { SectionHeader("الأدوات") }
         items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
+        item { SectionHeader("المظهر") }
+        item { ThemesMenuItem() }
         item { SectionHeader("أدوات المعلم") }
         item { MenuRow("طالب جديد", "إضافة سجل طالب في أي حلقة", Icons.Outlined.PersonAdd) { nav.navigate("student_edit/new" + (mine.firstOrNull()?.let { "?circle=${it.id}" } ?: "")) } }
         item { MenuRow("التقارير والإحصائيات", "رسوم الحلقات", Icons.Outlined.Insights) { nav.navigate("reports") } }
@@ -403,4 +407,12 @@ fun circleReportText(snap: CenterSnapshot, circleId: String, day: LocalDate): St
     val none = students.filter { s -> recs.none { it.studentId == s.id } && att[s.id]?.status != AttendanceStatus.ABSENT }
     if (none.isNotEmpty()) sb.append("\nلم يُسمِّعوا: ").append(none.joinToString("، ") { it.fullName }).append("\n")
     return sb.toString().trim()
+}
+
+/** «الثيمات» row in Settings: open to everyone (no password needed to change colours). */
+@Composable
+fun ThemesMenuItem() {
+    var open by remember { mutableStateOf(false) }
+    MenuRow("الثيمات", com.alsiddiq.app.ui.components.currentThemeLabel(), Icons.Outlined.Palette, Brand.Gold) { open = true }
+    if (open) com.alsiddiq.app.ui.components.ThemePickerSheet { open = false }
 }

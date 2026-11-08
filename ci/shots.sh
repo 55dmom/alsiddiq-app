@@ -54,6 +54,7 @@ adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool mus
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool mushaf_page --es page 1; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a2_tool_mushaf_page1.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool mushaf_page --es page 50; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a3_tool_mushaf_page50.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool hifz; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a4_tool_hifz.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool khatma; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a5_tool_khatma.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool prayer; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18b_tool_prayer.png
 adb shell input swipe 540 1700 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/18c_tool_prayer_scrolled.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool tasbeeh; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19_tool_tasbeeh.png
@@ -64,4 +65,33 @@ adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool dua
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/19_tools.crash.txt; [ -s shots/19_tools.crash.txt ] || rm -f shots/19_tools.crash.txt
 shot 01b_viewer_home_tools viewer home 14
 adb shell input swipe 540 1500 540 700 300; sleep 1; adb exec-out screencap -p > shots/01c_viewer_home_scrolled.png
+# «الثيمات»: the picker (open to everyone, before any password), then themes applied across the app and a tool
+adb logcat -c
+st() { # name theme extra-args...
+  local n="$1" th="$2"; shift 2
+  adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es theme "$th" "$@"; sleep 12; nodlg; sleep 1
+  adb exec-out screencap -p > "shots/$n.png"
+}
+st 20_themes_picker default --es demo_login gate --ez open_themes true
+st 21_theme_emerald_gate emerald --es demo_login gate
+st 21b_theme_emerald_home emerald --es demo_login viewer --es route home
+st 22_theme_night_gate night --es demo_login gate
+st 22b_theme_night_home night --es demo_login viewer --es route home
+st 22c_theme_night_settings night --es demo_login viewer --es route viewer_settings
+st 22d_theme_night_tools night --es demo_login gate --es open_tool menu
+st 22e_theme_night_prayer night --es open_tool prayer
+st 22f_theme_night_mushaf night --es open_tool mushaf_page --es page 3
+st 23_theme_sand_home sand --es demo_login viewer --es route home
+st 23b_theme_sand_tasbeeh sand --es open_tool tasbeeh
+st 24_theme_royal_gate royal --es demo_login gate
+st 24b_theme_royal_admin royal --es demo_login admin --es route more
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/20_themes.crash.txt; [ -s shots/20_themes.crash.txt ] || rm -f shots/20_themes.crash.txt
+# Small phone (360x640 dp) overflow check, original theme
+adb shell wm size 720x1280; adb shell wm density 320; sleep 2
+st 25_small_gate default --es demo_login gate
+st 25b_small_tools default --es demo_login gate --es open_tool menu
+st 25c_small_home default --es demo_login viewer --es route home
+st 25d_small_settings default --es demo_login viewer --es route viewer_settings
+st 25e_small_themes default --es demo_login gate --ez open_themes true
+adb shell wm size reset; adb shell wm density reset
 ls -la shots

@@ -24,6 +24,7 @@ import com.alsalmi.buttons.adhkar.AdhkarActivity
 import com.alsalmi.buttons.asma.AsmaAllahActivity
 import com.alsalmi.buttons.duas.DuasActivity
 import com.alsalmi.buttons.hifz.HifzActivity
+import com.alsalmi.buttons.khatma.KhatmaActivity
 import com.alsalmi.buttons.mushaf.MushafActivity
 import com.alsalmi.buttons.prayer.PrayerTimesActivity
 import com.alsalmi.buttons.tasbeeh.TasbeehActivity
@@ -33,17 +34,21 @@ import com.alsiddiq.app.ui.theme.Brand
  * «الأدوات»: السالمي's own side buttons, open to everyone (no password). Each one is an independent module.
  * To add the next one (المصحف، الأذكار…): add its module and ONE line to [Tools.all].
  */
-data class ToolItem(val title: String, val sub: String, val icon: ImageVector, val color: Color, val open: (Context) -> Unit)
+class ToolItem(val title: String, val sub: String, val icon: ImageVector, private val colorOf: () -> Color, val open: (Context) -> Unit) {
+    /** Read at drawing time, so it follows the chosen theme. */
+    val color: Color get() = colorOf()
+}
 
 object Tools {
     val all: List<ToolItem> = listOf(
-        ToolItem("المصحف", "المصحف كامل، صفحة صفحة", Icons.Outlined.MenuBook, Brand.Green) { MushafActivity.start(it) },
-        ToolItem("وضع الحفظ", "احفظ أي سورة أو مقطع وراجع محفوظك", Icons.Outlined.AutoStories, Brand.Navy) { HifzActivity.start(it) },
-        ToolItem("مواقيت الصلاة", "الأوقات والإقامة والتنبيه، بدون إنترنت", Icons.Outlined.Schedule, Brand.Orange) { PrayerTimesActivity.start(it) },
-        ToolItem("الأذكار", "أذكار الصباح والمساء وغيرها", Icons.Outlined.WbSunny, Brand.Navy) { AdhkarActivity.start(it) },
-        ToolItem("الأدعية", "أدعية من القرآن والسنة", Icons.Outlined.VolunteerActivism, Brand.Green) { DuasActivity.start(it) },
-        ToolItem("المسبحة", "عداد تسبيح وأذكار", Icons.Outlined.TouchApp, Brand.Gold) { TasbeehActivity.start(it) },
-        ToolItem("أسماء الله الحسنى", "الأسماء الـ99 ومعانيها", Icons.Outlined.AutoAwesome, Brand.Maroon) { AsmaAllahActivity.start(it) },
+        ToolItem("المصحف", "المصحف كامل، صفحة صفحة", Icons.Outlined.MenuBook, { Brand.Green }) { MushafActivity.start(it) },
+        ToolItem("وضع الحفظ", "احفظ أي سورة أو مقطع وراجع محفوظك", Icons.Outlined.Bookmark, { Brand.Navy }) { HifzActivity.start(it) },
+        ToolItem("الختمة", "خطة ختم القرآن ومتابعة وردك", Icons.Outlined.DateRange, { Brand.Maroon }) { KhatmaActivity.start(it) },
+        ToolItem("مواقيت الصلاة", "الأوقات والإقامة والتنبيه، بدون إنترنت", Icons.Outlined.Mosque, { Brand.Orange }) { PrayerTimesActivity.start(it) },
+        ToolItem("الأذكار", "أذكار الصباح والمساء وغيرها", Icons.Outlined.WbSunny, { Brand.Navy }) { AdhkarActivity.start(it) },
+        ToolItem("الأدعية", "أدعية من القرآن والسنة", Icons.Outlined.VolunteerActivism, { Brand.Green }) { DuasActivity.start(it) },
+        ToolItem("المسبحة", "عداد تسبيح وأذكار", Icons.Outlined.TouchApp, { Brand.Gold }) { TasbeehActivity.start(it) },
+        ToolItem("أسماء الله الحسنى", "الأسماء الـ99 ومعانيها", Icons.Outlined.AutoAwesome, { Brand.Maroon }) { AsmaAllahActivity.start(it) },
     )
     /** Debug/CI only: open the menu on the first screen for a screenshot. */
     var openOnStart = false
@@ -53,7 +58,7 @@ object Tools {
 fun ToolsSheet(onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     // 7 tools now: open fully and scroll on small phones so none is cut off.
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Card, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Brand.GoldSoft), contentAlignment = Alignment.Center) {
@@ -83,6 +88,8 @@ fun ToolsSheet(onDismiss: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(6.dp))
+            ThemesEntry()
+            Spacer(Modifier.height(6.dp))
             Text("أدوات أكثر قريباً", style = MaterialTheme.typography.labelSmall, color = Brand.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -109,7 +116,7 @@ fun ToolsRow(modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) { Tools.all.chunked(2).forEach { pair ->
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         pair.forEach { t ->
-            Surface(onClick = { t.open(ctx) }, shape = RoundedCornerShape(18.dp), color = Color.White, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
+            Surface(onClick = { t.open(ctx) }, shape = RoundedCornerShape(18.dp), color = Brand.Card, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
                 Column(Modifier.padding(vertical = 14.dp, horizontal = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(t.color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
                         Icon(t.icon, null, tint = t.color)

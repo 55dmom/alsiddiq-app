@@ -64,24 +64,25 @@ import androidx.compose.ui.unit.sp
 
 /** This button's own colours. */
 internal object PrC {
-    val accent: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF60A5FA) else Color(0xFF1D4ED8)
-    val accent2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF22D3EE) else Color(0xFF0891B2)
-    val bg: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF0B0E12) else Color(0xFFF3F5F7)
-    val card: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF161A20) else Color.White
-    val line: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF262C35) else Color(0xFFE4E8EE)
-    val soft: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF24354B) else Color(0xFFE3E9FA)
-    val text: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFE8ECF1) else Color(0xFF141A21)
-    val text2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF9AA4B1) else Color(0xFF5E6874)
-    val gold: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFF2C14E) else Color(0xFFB7791F)
-    val good: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF4ADE80) else Color(0xFF15803D)
-    val warn: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFFB923C) else Color(0xFFC2410C)
-    val gradient: Brush @Composable get() = if (isSystemInDarkTheme()) Brush.linearGradient(listOf(Color(0xFF1842B7), Color(0xFF067B97))) else Brush.linearGradient(listOf(Color(0xFF1D4ED8), Color(0xFF0891B2)))
+    val accent: Color @Composable get() = LocalPrHost.current?.accent ?: (if (prDark()) Color(0xFF60A5FA) else Color(0xFF1D4ED8))
+    val accent2: Color @Composable get() = LocalPrHost.current?.accent2 ?: (if (prDark()) Color(0xFF22D3EE) else Color(0xFF0891B2))
+    val bg: Color @Composable get() = LocalPrHost.current?.bg ?: (if (prDark()) Color(0xFF0B0E12) else Color(0xFFF3F5F7))
+    val card: Color @Composable get() = LocalPrHost.current?.card ?: (if (prDark()) Color(0xFF161A20) else Color.White)
+    val line: Color @Composable get() = LocalPrHost.current?.line ?: (if (prDark()) Color(0xFF262C35) else Color(0xFFE4E8EE))
+    val soft: Color @Composable get() = LocalPrHost.current?.soft ?: (if (prDark()) Color(0xFF24354B) else Color(0xFFE3E9FA))
+    val text: Color @Composable get() = LocalPrHost.current?.text ?: (if (prDark()) Color(0xFFE8ECF1) else Color(0xFF141A21))
+    val text2: Color @Composable get() = LocalPrHost.current?.text2 ?: (if (prDark()) Color(0xFF9AA4B1) else Color(0xFF5E6874))
+    val gold: Color @Composable get() = if (prDark()) Color(0xFFF2C14E) else Color(0xFFB7791F)
+    val good: Color @Composable get() = if (prDark()) Color(0xFF4ADE80) else Color(0xFF15803D)
+    val warn: Color @Composable get() = if (prDark()) Color(0xFFFB923C) else Color(0xFFC2410C)
+    val gradient: Brush @Composable get() = LocalPrHost.current?.let { Brush.linearGradient(listOf(it.grad1, it.grad2)) } ?: (if (prDark()) Brush.linearGradient(listOf(Color(0xFF1842B7), Color(0xFF067B97))) else Brush.linearGradient(listOf(Color(0xFF1D4ED8), Color(0xFF0891B2))))
 }
 
 /** Light / dark follow the system, Arabic RTL. */
 @Composable
 internal fun PrTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+    val host = prHostRead()
+    val dark = host?.dark ?: isSystemInDarkTheme()
     val scheme = if (dark) darkColorScheme(
         primary = Color(0xFF60A5FA), onPrimary = Color(0xFF06121A),
         primaryContainer = Color(0xFF24354B), onPrimaryContainer = Color(0xFFE8ECF1),
@@ -101,9 +102,15 @@ internal fun PrTheme(content: @Composable () -> Unit) {
         surfaceContainer = Color.White, surfaceContainerHigh = Color.White,
         outlineVariant = Color(0xFFE4E8EE),
     )
-    MaterialTheme(colorScheme = scheme) {
+    val themed = if (host == null) scheme else scheme.copy(
+        primary = host.accent, onPrimary = if (host.dark) Color(0xFF0E1016) else Color.White,
+        primaryContainer = host.soft, onPrimaryContainer = host.text, secondary = host.accent2,
+        background = host.bg, onBackground = host.text, surface = host.bg, onSurface = host.text,
+        surfaceVariant = host.card, onSurfaceVariant = host.text2, surfaceContainer = host.card, outlineVariant = host.line,
+    )
+    CompositionLocalProvider(LocalPrHost provides host) { MaterialTheme(colorScheme = themed) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { content() }
-    }
+    } }
 }
 
 /** Gentle shrink while pressed, then onClick. */
@@ -275,3 +282,22 @@ internal object PrHaptics {
     fun tap(v: View) { v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
     fun success(v: View) { v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) }
 }
+
+
+// ===== «الثيمات» من تطبيق «مركز الصديق»: طبقة الألوان فقط، النصوص والمنطق ما تغيّرت.
+// التطبيق يكتب ألوان الثيم المختار (أو ثيم المناسبة) في «alsiddiq_theme». الثيم الأصلي أو بدون اختيار = ألوان هذا الزر الأصلية كما هي.
+internal class PrHostColors(val dark: Boolean, val accent: Color, val accent2: Color, val bg: Color, val card: Color, val line: Color, val soft: Color, val text: Color, val text2: Color, val grad1: Color, val grad2: Color)
+internal val LocalPrHost = androidx.compose.runtime.staticCompositionLocalOf<PrHostColors?> { null }
+/** Reads the colours the app wrote for its tools (only when a theme other than the original is in force). */
+internal fun prHostFrom(sp: android.content.SharedPreferences): PrHostColors? {
+    if (!sp.getBoolean("tools_on", false)) return null
+    fun c(k: String) = Color(sp.getInt(k, 0))
+    return PrHostColors(sp.getBoolean("t_dark", false), c("t_accent"), c("t_accent2"), c("t_bg"), c("t_card"), c("t_line"), c("t_soft"), c("t_text"), c("t_text2"), c("t_grad1"), c("t_grad2"))
+}
+@Composable
+internal fun prHostRead(): PrHostColors? {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    return androidx.compose.runtime.remember { prHostFrom(ctx.getSharedPreferences("alsiddiq_theme", android.content.Context.MODE_PRIVATE)) }
+}
+@Composable
+internal fun prDark(): Boolean = LocalPrHost.current?.dark ?: isSystemInDarkTheme()

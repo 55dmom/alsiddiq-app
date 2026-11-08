@@ -94,7 +94,7 @@ fun HomeHeader(greeting: String, title: String, subtitle: String, unread: Int, o
     Box(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp))
-            .background(Brush.linearGradient(listOf(Brand.Navy, Color(0xFF3A3486), Brand.NavyDark)))
+            .background(Brush.linearGradient(listOf(Brand.Navy, Brand.NavyMid, Brand.NavyDark)))
             .statusBarsPadding()
             .padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 26.dp)
     ) {
@@ -246,7 +246,7 @@ fun <T> PickerDialog(title: String, items: List<T>, label: (T) -> String, onPick
 fun SelectorField(label: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Brand.Line, RoundedCornerShape(14.dp))
-            .background(Color.White).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp)
+            .background(Brand.Card).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
         Row(verticalAlignment = Alignment.CenterVertically) {
