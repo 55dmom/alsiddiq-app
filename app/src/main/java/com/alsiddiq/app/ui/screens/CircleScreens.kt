@@ -86,6 +86,9 @@ fun CircleDetailScreen(user: Member, nav: NavHostController, id: String) {
     ScreenList(circle.name, onBack = { nav.popBackStack() }, actions = {
         if (Permissions.canManageCircles(user)) IconButton(onClick = { nav.navigate("circle_edit/${circle.id}") }) { Icon(Icons.Outlined.Edit, "تعديل") }
     }) {
+        // v3.8 «لوحة الحلقة»: a wide banner; the admin and the circle's teacher(s) set, change or remove it.
+        item { CircleBanner(circle, canEdit = user.role == Role.ADMIN || Permissions.teachesCircle(user, circle)) }
+        item { CircleStarRow(snap, circle, big = true) }   // v3.8 «نجم الحلقة لهذا الأسبوع» (automatic)
         item {
             AppCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -154,8 +157,8 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
     val repo = LocalContainer.current.center
     val existing = snap.circle(id)
     var name by remember { mutableStateOf(existing?.name ?: "") }
-    var teacherName by remember { mutableStateOf(snap.teacherOf(existing)) }
-    var teacherId by remember { mutableStateOf(existing?.teacherId) }
+    // v3.8: more than one teacher per circle («إضافة أستاذ»); the first one stays the circle's single teacher for older builds.
+    val teachers = remember { mutableStateListOf<String>().apply { addAll(existing?.allTeacherIds().orEmpty()) } }
     var level by remember { mutableStateOf(ArabicText.level(existing?.level ?: "")) }
     var schedule by remember { mutableStateOf(existing?.schedule ?: "") }
     var capacity by remember { mutableStateOf((existing?.capacity ?: 15).toString()) }
@@ -171,7 +174,19 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
             AppCard {
                 Field(name, { name = it }, "اسم الحلقة")
                 Spacer(Modifier.height(10.dp))
-                SelectorField("المعلم (اختياري)", teacherName ?: "اختر من المعلمين") { pickTeacher = true }
+                Text("المعلمون", style = MaterialTheme.typography.labelMedium, color = Brand.Muted)
+                Spacer(Modifier.height(6.dp))
+                if (teachers.isEmpty()) Text("بدون معلم", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                teachers.toList().forEach { tid ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(12.dp)).background(Brand.MaroonSoft).padding(start = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Avatar(snap.member(tid)?.fullName ?: "؟", 30.dp, Brand.Maroon)
+                        Spacer(Modifier.width(8.dp))
+                        Text(snap.member(tid)?.fullName ?: "معلم", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { teachers.remove(tid) }) { Icon(Icons.Outlined.Close, "إزالة", tint = Brand.Red) }
+                    }
+                }
+                TextButton(onClick = { pickTeacher = true }) { Icon(Icons.Outlined.PersonAdd, null); Spacer(Modifier.width(6.dp)); Text("إضافة أستاذ") }
                 Spacer(Modifier.height(12.dp))
                 Text("المستوى", style = MaterialTheme.typography.labelMedium, color = Brand.Muted)
                 Spacer(Modifier.height(6.dp))
@@ -190,12 +205,17 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
         item {
             Button(
                 onClick = {
+                    val list = teachers.toList()
+                    val first = list.firstOrNull()
                     val c = (existing ?: Circle("", "", null)).copy(
-                        name = name.trim(), teacherName = teacherName, teacherId = teacherId, level = level, schedule = schedule.trim(),
+                        name = name.trim(), teacherName = snap.member(first)?.fullName, teacherId = first, level = level, schedule = schedule.trim(),
                         capacity = capacity.toIntOrNull() ?: 15,
                         feeYer = fee.toIntOrNull(), feePeriod = feePeriod
                     )
-                    actions.run(if (existing == null) "تم إنشاء الحلقة" else "تم الحفظ", { repo.saveCircle(c) }) { nav.popBackStack() }
+                    val listChanged = list != (existing?.allTeacherIds() ?: listOfNotNull(first))
+                    actions.run(if (existing == null) "تم إنشاء الحلقة" else "تم الحفظ", {
+                        repo.saveCircle(c).mapCatching { saved -> if (listChanged || list.size > 1) repo.setCircleTeachers(saved.id, list).getOrThrow(); saved }
+                    }) { nav.popBackStack() }
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
             ) { Text(if (existing == null) "إنشاء الحلقة" else "حفظ") }
@@ -206,8 +226,8 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
         }
     }
     // v3.3: the circle's teacher is one of the teachers' accounts (each with his own password).
-    if (pickTeacher) PickerDialog("اختر المعلم", listOf(Member("", "بدون معلم", "", Role.TEACHER)) + snap.teachers().sortedBy { it.fullName }, { it.fullName },
-        { teacherId = it.id.ifEmpty { null }; teacherName = it.fullName.takeIf { _ -> it.id.isNotEmpty() } }, { pickTeacher = false })
+    if (pickTeacher) PickerDialog("إضافة أستاذ", snap.teachers().filter { it.id !in teachers }.sortedBy { it.fullName }, { it.fullName },
+        { if (it.id !in teachers) teachers.add(it.id) }, { pickTeacher = false })
     if (askDelete && existing != null) ConfirmDialog(
         "حذف الحلقة؟", "سيبقى الطلاب وسجلاتهم، لكن يصبحون بدون حلقة.", "حذف",
         { actions.run("حُذفت الحلقة", { repo.deleteCircle(existing.id) }) { if (!nav.popBackStack("circles", false)) nav.popBackStack("home", false) } },

@@ -63,12 +63,13 @@ fun TeacherHome(user: Member, nav: NavHostController) {
     // His request (Nov 8, 5:42 PM): a realistic, blurred background photo on the home screen (not inside his tools).
     LazyColumn(Modifier.fillMaxSize().homeBackdrop(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            HomeHeader("السلام عليكم", user.fullName, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
+            HomeHeader("السلام عليكم ورحمة الله وبركاته", user.fullName, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 StatusBanners(Modifier.padding(top = 12.dp))
                 com.alsiddiq.app.ui.components.OccasionBanner(Modifier.padding(top = 12.dp))
+                WeeklyStarCard(snap, Modifier.padding(top = 12.dp))   // v3.8 «وسام الشرف لهذا الأسبوع» (automatic)
                 Spacer(Modifier.height(10.dp))
                 RoleStrip(user)
                 Spacer(Modifier.height(10.dp))

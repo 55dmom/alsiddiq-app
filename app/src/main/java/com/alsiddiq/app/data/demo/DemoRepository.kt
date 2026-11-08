@@ -198,8 +198,8 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         val d0 = store.data
         val members = if (existing != null) d0.members.map { if (it.id == mid) saved else it } else d0.members + saved
         val circles = d0.circles.map { c -> when {
-            c.id == circleId -> c.copy(teacherId = mid, teacherName = saved.fullName)
-            c.teacherId == mid -> c.copy(teacherId = null, teacherName = null)
+            c.id == circleId -> c.copy(teacherId = mid, teacherName = saved.fullName, teacherIds = (c.teacherIds - setOfNotNull(c.teacherId) + mid).distinct())
+            c.teacherId == mid -> c.copy(teacherId = null, teacherName = null, teacherIds = c.teacherIds - mid)
             else -> c } }
         store = store.copy(data = d0.copy(members = members, circles = circles),
             passwordHashes = if (pw != null) store.passwordHashes + (mid to hash(pw)) else store.passwordHashes)
@@ -395,5 +395,77 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         aboutLocal.set(aboutLocal.page.copy(buttons = AboutLocal.sorted(list.filterNot { it.id == saved.id } + saved)))
     }
     override suspend fun deleteAboutButton(id: String): Result<Unit> = runCatching { adminOnly(); aboutLocal.set(aboutLocal.page.copy(buttons = aboutLocal.page.buttons.filterNot { it.id == id })) }
+
+    // ---------------- v3.8 (demo, on this phone only): teachers' attendance, budget, subscriptions, circle photo ----------------
+    @Serializable
+    private data class V38Store(val marks: List<TeacherMark> = emptyList(), val budget: List<BudgetEntry> = emptyList(), val subs: List<SubscriptionMark> = emptyList())
+    private val v38File = File(context.filesDir, "demo_v38.json")
+    private var v38: V38Store = runCatching { json.decodeFromString(V38Store.serializer(), v38File.readText()) }.getOrNull() ?: seedV38()
+    private fun saveV38() { val t = json.encodeToString(V38Store.serializer(), v38); io.launch { runCatching { v38File.writeText(t) } } }
+    private fun seedV38(): V38Store {
+        val today = java.time.LocalDate.now()
+        val teachers = store.data.members.filter { it.role == Role.TEACHER && it.active && !it.allCircles }
+        val marks = (1..6).flatMap { back -> val d = today.minusDays(back.toLong()).toString()
+            teachers.mapIndexed { i, t -> TeacherMark(t.id, d, !(i == 1 && back % 3 == 0) && !(i == 2 && back == 2)) } }
+        val st = store.data.students.filter { it.active }
+        val m0 = today.withDayOfMonth(1)
+        val budget = st.take(4).mapIndexed { i, s -> BudgetEntry("b-in-$i", BudgetEntry.INCOME, (store.data.circle(s.circleId)?.feeYer ?: 3000).toDouble(),
+                m0.plusDays(i.toLong()).toString(), s.id, if (i == 0) "اشتراك شهر" else "") } +
+            listOf(BudgetEntry("b-ex-1", BudgetEntry.EXPENSE, 4500.0, m0.plusDays(2).toString(), null, "شراء مصاحف للحلقات"),
+                BudgetEntry("b-ex-2", BudgetEntry.EXPENSE, 2000.0, m0.plusDays(4).toString(), null, "كهرباء المسجد"),
+                BudgetEntry("b-ex-3", BudgetEntry.EXPENSE, 1500.0, m0.minusDays(10).toString(), null, "جوائز المتفوقين"))
+        val subs = st.filter { it.circleId == "c1" || it.circleId == "c2" }.mapIndexed { i, s ->
+            val fee = (store.data.circle(s.circleId)?.feeYer ?: 0).toDouble()
+            SubscriptionMark(s.id, m0.toString(), i % 3 != 2, if (i % 3 != 2) fee else null) }
+        return V38Store(marks, budget, subs)
+    }
+    private fun adminV38() { if (_user.value?.role != Role.ADMIN) throw PermissionDenied() }
+
+    override suspend fun teacherMarks(fromDay: String, toDay: String): Result<List<TeacherMark>> = runCatching {
+        adminV38(); v38.marks.filter { it.day >= fromDay && it.day <= toDay }.sortedByDescending { it.day }
+    }
+    override suspend fun saveTeacherMarks(day: String, present: Map<String, Boolean>): Result<Int> = runCatching {
+        adminV38(); if (present.isEmpty()) throw ValidationError("حدّد حاضر أو غائب لمعلم واحد على الأقل")
+        v38 = v38.copy(marks = v38.marks.filterNot { it.day == day && it.teacherId in present.keys } + present.map { (t, p) -> TeacherMark(t, day, p) }); saveV38(); present.size
+    }
+    override suspend fun budgetEntries(): Result<List<BudgetEntry>> = runCatching { adminV38(); v38.budget.sortedWith(compareByDescending<BudgetEntry> { it.day }.thenByDescending { it.createdAt }) }
+    override suspend fun saveBudgetEntry(e: BudgetEntry, isNew: Boolean): Result<Unit> = runCatching {
+        adminV38()
+        if (e.amount <= 0) throw ValidationError("اكتب مبلغاً أكبر من صفر")
+        if (!e.isIncome && e.note.isBlank()) throw ValidationError("اكتب ملاحظة الصرف")
+        v38 = v38.copy(budget = if (isNew) v38.budget + e else v38.budget.map { if (it.id == e.id) e else it }); saveV38()
+    }
+    override suspend fun deleteBudgetEntry(id: String): Result<Unit> = runCatching { adminV38(); v38 = v38.copy(budget = v38.budget.filterNot { it.id == id }); saveV38() }
+    override suspend fun subscriptions(month: String): Result<List<SubscriptionMark>> = runCatching {
+        val u = _user.value ?: throw PermissionDenied()
+        if (u.role == Role.ADMIN) v38.subs.filter { it.month == month }
+        else if (u.role == Role.TEACHER) { val mine = store.data.circles.filter { it.taughtBy(u.id) }.map { it.id }.toSet()
+            v38.subs.filter { it.month == month && store.data.student(it.studentId)?.circleId in mine } }
+        else throw PermissionDenied()
+    }
+    override suspend fun saveSubscription(m: SubscriptionMark): Result<Unit> = runCatching {
+        val u = _user.value ?: throw PermissionDenied()
+        val s = store.data.student(m.studentId) ?: throw ValidationError("الطالب غير موجود")
+        if (!(u.role == Role.ADMIN || (u.role == Role.TEACHER && store.data.circle(s.circleId)?.taughtBy(u.id) == true))) throw PermissionDenied()
+        v38 = v38.copy(subs = v38.subs.filterNot { it.studentId == m.studentId && it.month == m.month } + m.copy(amount = if (m.paid) m.amount else null)); saveV38()
+    }
+    override suspend fun setCirclePhoto(circleId: String, jpeg: ByteArray?) = mutate { d, u ->
+        val c = d.circle(circleId) ?: throw ValidationError("الحلقة غير موجودة")
+        if (!(u.role == Role.ADMIN || (u.role == Role.TEACHER && c.taughtBy(u.id)))) throw PermissionDenied()
+        c.photoPath?.takeIf { !it.startsWith("demo-seed/") }?.let { runCatching { File(photoDir, it.replace('/', '_')).delete() } }
+        val path = jpeg?.let { "demo/circles/$circleId/${newId().take(8)}.jpg" }
+        if (jpeg != null && path != null) File(photoDir, path.replace('/', '_')).writeBytes(jpeg)
+        d.copy(circles = d.circles.map { if (it.id == circleId) it.copy(photoPath = path) else it }) to Unit
+    }
+    override suspend fun setCircleTeachers(circleId: String, teacherIds: List<String>) = mutate { d, u ->
+        if (u.role != Role.ADMIN) throw PermissionDenied()
+        d.circle(circleId) ?: throw ValidationError("الحلقة غير موجودة")
+        val ids = teacherIds.distinct(); val first = ids.firstOrNull()
+        d.copy(circles = d.circles.map { if (it.id == circleId) it.copy(teacherId = first, teacherName = d.member(first)?.fullName, teacherIds = ids) else it }) to Unit
+    }
+    override suspend fun circlePhoto(path: String): ByteArray? =
+        if (path.startsWith("demo-seed/")) runCatching { context.resources.openRawResource(com.alsiddiq.app.R.drawable.home_bg_blur).use { it.readBytes() } }.getOrNull()
+        else studentPhoto(path)
+
     override suspend fun moveAboutButton(id: String, up: Boolean): Result<Unit> = runCatching { adminOnly(); aboutLocal.set(aboutLocal.page.copy(buttons = AboutLocal.move(aboutLocal.page.buttons, id, up))) }
 }

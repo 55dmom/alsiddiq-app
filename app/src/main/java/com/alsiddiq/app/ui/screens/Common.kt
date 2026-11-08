@@ -105,7 +105,8 @@ fun HomeHeader(greeting: String, title: String, subtitle: String, unread: Int, o
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(greeting, color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall)
+                    // his request (Nov 8, 10:15 PM): the full salaam; it may wrap to two lines on a 360dp phone
+                    Text(greeting, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium, maxLines = 2)
                     Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Box {

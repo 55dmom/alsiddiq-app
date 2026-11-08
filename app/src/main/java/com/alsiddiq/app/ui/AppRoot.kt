@@ -248,6 +248,11 @@ private fun AppNavHost(nav: NavHostController, user: Member) {
         composable("viewer_settings") { ViewerSettingsScreen(user, nav) }
         composable("tools") { com.alsiddiq.app.ui.components.ToolsTabScreen() }
         composable("honors") { com.alsiddiq.app.ui.screens.HonorsScreen(user, nav) }
+        // v3.8 (his requests of Nov 8, 9:42–10:06 PM)
+        composable("teacher_attendance") { com.alsiddiq.app.ui.screens.TeacherAttendanceScreen(user, nav) }
+        composable("budget") { com.alsiddiq.app.ui.screens.BudgetScreen(user, nav) }
+        composable("subscriptions") { com.alsiddiq.app.ui.screens.SubscriptionsScreen(user, nav, null) }
+        composable("subscriptions/{circleId}") { com.alsiddiq.app.ui.screens.SubscriptionsScreen(user, nav, it.arguments?.getString("circleId")) }
         composable("role_login/{kind}") {
             val kind = if (it.arguments?.getString("kind") == "TEACHER") Role.TEACHER else Role.ADMIN
             com.alsiddiq.app.ui.auth.RoleLoginScreen(kind) { nav.popBackStack() }

@@ -143,6 +143,28 @@ object Stats {
         Honor(s, pages, recs.sumOf { ayatOf(it) }, grade, rate, recs.size, pages * 10 + grade * 4 + rate * 10)
     }.sortedWith(compareByDescending<Honor> { it.score }.thenByDescending { it.ayat })
 
+    /** v3.8 «وسام الشرف لهذا الأسبوع»: the week starts on Saturday. */
+    fun weekStart(today: LocalDate = LocalDate.now()): LocalDate = today.minusDays(((today.dayOfWeek.value + 1) % 7).toLong())
+
+    /**
+     * v3.8 «وسام الشرف لهذا الأسبوع» — automatic (his word «تلقائي», Nov 8): the circle's student with the most ayat recorded
+     * this week (Saturday → today); ties go to the fewest absences this week, then the better average grade.
+     * null = nothing recorded in the circle this week («لم يُحدد بعد»).
+     */
+    fun weeklyStar(snap: CenterSnapshot, circleId: String, today: LocalDate = LocalDate.now()): Student? {
+        val from = weekStart(today)
+        val students = snap.studentsIn(circleId).filter { it.active }
+        data class Row(val s: Student, val ayat: Int, val absent: Int, val grade: Double)
+        return students.mapNotNull { s ->
+            val recs = snap.recitations.filter { it.studentId == s.id && !dayOf(it.recordedAt).isBefore(from) && !dayOf(it.recordedAt).isAfter(today) }
+            if (recs.isEmpty()) return@mapNotNull null
+            val absent = snap.attendance.count { it.studentId == s.id && it.status == AttendanceStatus.ABSENT &&
+                runCatching { !LocalDate.parse(it.day).isBefore(from) }.getOrDefault(false) }
+            Row(s, recs.sumOf { ayatOf(it) }, absent, recs.map { it.grade.score }.average())
+        }.sortedWith(compareByDescending<Row> { it.ayat }.thenBy { it.absent }.thenByDescending { it.grade }.thenBy { it.s.fullName })
+            .firstOrNull()?.s
+    }
+
     fun describeRange(r: Recitation): String =
         if (r.fromSurah == r.toSurah) "${Quran.name(r.fromSurah)} ${r.fromAyah}–${r.toAyah}"
         else "${Quran.name(r.fromSurah)} ${r.fromAyah} إلى ${Quran.name(r.toSurah)} ${r.toAyah}"

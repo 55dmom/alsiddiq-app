@@ -59,7 +59,7 @@ fun AdminHome(user: Member, nav: NavHostController) {
     LazyColumn(Modifier.fillMaxSize().homeBackdrop(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             HomeHeader(
-                "السلام عليكم ورحمة الله", snap.center.name,
+                "السلام عليكم ورحمة الله وبركاته", snap.center.name,
                 Fmt.dayTitle(today) + " • " + Fmt.hijri(today),
                 // v3.6: the bell also counts the teachers' new actions (registered / dismissed a student).
                 snap.notifications.count { !it.read } + snap.events.count { it.unread }
@@ -69,6 +69,7 @@ fun AdminHome(user: Member, nav: NavHostController) {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 StatusBanners(Modifier.padding(top = 12.dp))
                 com.alsiddiq.app.ui.components.OccasionBanner(Modifier.padding(top = 12.dp))
+                WeeklyStarCard(snap, Modifier.padding(top = 12.dp))   // v3.8 «وسام الشرف لهذا الأسبوع» (automatic)
                 Spacer(Modifier.height(10.dp))
                 RoleStrip(user)
                 Spacer(Modifier.height(10.dp))
@@ -162,7 +163,10 @@ fun CircleCard(c: Circle, snap: CenterSnapshot, onClick: () -> Unit) {
     val present = att.count { it.status == AttendanceStatus.PRESENT || it.status == AttendanceStatus.LATE }
     AppCard(onClick = onClick, padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(Brand.NavySoft), contentAlignment = Alignment.Center) {
+            // v3.8: the circle's own photo when it has one; otherwise the current look
+            val thumb = rememberCirclePhoto(c.photoPath)
+            if (thumb != null) androidx.compose.foundation.Image(thumb, c.name, Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            else Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(Brand.NavySoft), contentAlignment = Alignment.Center) {
                 Icon(Icons.Outlined.Groups, null, tint = Brand.Navy)
             }
             Spacer(Modifier.width(12.dp))
@@ -177,6 +181,8 @@ fun CircleCard(c: Circle, snap: CenterSnapshot, onClick: () -> Unit) {
                 if (c.level.isNotBlank()) { Spacer(Modifier.height(4.dp)); Pill(ArabicText.level(c.level), Brand.Maroon) }
             }
         }
+        Spacer(Modifier.height(10.dp))
+        CircleStarRow(snap, c)   // v3.8 «نجم الحلقة لهذا الأسبوع» (automatic)
         if (att.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -196,14 +202,15 @@ fun MoreScreen(user: Member, nav: NavHostController) {
         item { SectionHeader("المعلمون وكلمات السر") }
         item { MenuRow("المعلمون", "${snap.activeTeacherNames().size} اسم • لمعرفة من سجّل", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teachers") } }
         item { MenuRow("كلمات السر", "العامة والمعلمين والإدارة", Icons.Outlined.Password) { nav.navigate("passwords") } }
-        item { SectionHeader("الأدوات") }
-        items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
         item { SectionHeader("المظهر") }
         item { ThemesMenuItem() }
         item { com.alsiddiq.app.ui.about.CenterInfoEntries() }
         item { SectionHeader("المتابعة") }
         item { MenuRow("المتفوقون", "ترتيب تلقائي من التقارير • اظهر تفوق الطالب", Icons.Outlined.EmojiEvents, Brand.Gold) { nav.navigate("honors") } }
         item { MenuRow("الحضور والغياب", "تسجيل ومراجعة الحضور", Icons.Outlined.FactCheck) { nav.navigate("attendance") } }
+        item { MenuRow("حضور وغياب المعلمين", "حاضر / غائب لكل معلم، مع السجل", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teacher_attendance") } }
+        item { MenuRow("الاشتراكات الشهرية", "كشف كل حلقة: سلم أو لم يسلم، مع المبلغ", Icons.Outlined.Payments, Brand.Green) { nav.navigate("subscriptions") } }
+        item { MenuRow("الميزانية", "الدخل والصرف والمتبقي • للإدارة فقط", Icons.Outlined.AccountBalanceWallet, Brand.Gold) { nav.navigate("budget") } }
         items(snap.circles.sortedBy { it.name }.take(6)) { c -> MenuRow("تقرير ${c.name}", "كم حفظوا ومن غاب", Icons.Outlined.Summarize, Brand.Gold) { nav.navigate("circle_report/${c.id}") } }
         item { MenuRow("المكافآت والنقاط", "لوحة الشرف ومنح النقاط", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
         item { MenuRow("الإعلانات والتقارير", "${snap.announcements.size} منشور", Icons.Outlined.Campaign) { nav.navigate("announcements") } }

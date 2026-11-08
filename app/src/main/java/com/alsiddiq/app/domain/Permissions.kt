@@ -19,7 +19,7 @@ object Permissions {
 
     /** v3.3: own circle only (the shared account owns none). */
     fun teachesCircle(user: Member, circle: Circle?) =
-        circle != null && user.role == Role.TEACHER && !user.allCircles && circle.teacherId == user.id
+        circle != null && user.role == Role.TEACHER && !user.allCircles && circle.taughtBy(user.id)
 
     /** Add a student into this circle (admin anywhere; teacher only into his own circle). */
     fun canAddStudentTo(user: Member, circleId: String?, snap: CenterSnapshot) = when (user.role) {

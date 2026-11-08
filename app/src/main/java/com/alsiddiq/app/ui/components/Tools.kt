@@ -98,14 +98,12 @@ fun ToolsBlock(titleColor: Color = Brand.Navy) {
     }
 }
 
-/** The «الأدوات» tab in the bottom bar: the shared block, then «الثيمات», «عن المركز» and «تواصل مع المطوّر» as in the menu. */
+/** The «الأدوات» tab in the bottom bar: the shared block only. */
 @Composable
 fun ToolsTabScreen() {
     Column(Modifier.fillMaxSize().background(Brand.Bg).verticalScroll(rememberScrollState()).statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ToolsBlock()
-        ThemesEntry()
-        com.alsiddiq.app.ui.about.CenterInfoEntries()
+        ToolsBlock()   // his request (Nov 8, 9:42 PM): themes / about / developer live in the settings only
         Spacer(Modifier.height(8.dp))
     }
 }
@@ -142,10 +140,6 @@ private fun ToolsMenuContent(onDismiss: () -> Unit, modifier: Modifier = Modifie
                     }
                 }
             }
-            Spacer(Modifier.height(6.dp))
-            ThemesEntry()
-            Spacer(Modifier.height(8.dp))
-            com.alsiddiq.app.ui.about.CenterInfoEntries(onOpen = onDismiss)
             Spacer(Modifier.height(6.dp))
             Text("أدوات أكثر قريباً", style = MaterialTheme.typography.labelSmall, color = Brand.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }

@@ -28,7 +28,7 @@ internal object Rows {
         id = o.s("id")!!, name = o.s("name") ?: "", teacherId = o.s("teacher_id"), level = o.s("level") ?: "",
         schedule = o.s("schedule") ?: "", capacity = o.i("capacity") ?: 15, active = o.b("active") ?: true, createdAt = ts(o.s("created_at")),
         teacherName = o.s("teacher_name"),
-        feeYer = o.i("fee_yer"), feePeriod = o.s("fee_period")
+        feeYer = o.i("fee_yer"), feePeriod = o.s("fee_period"), photoPath = o.s("photo_path")
     )
     fun circleRow(c: Circle, center: String) = buildJsonObject {
         put("id", c.id); put("center_id", center); put("name", c.name); put("teacher_id", c.teacherId)

@@ -162,6 +162,11 @@ class SupabaseApi(private val baseUrl: String, private val publicKey: String) {
         runCatching { exec("DELETE", "/storage/v1/object/$bucket/$path", token) }
     }
 
+    /** v3.8: a SECURITY DEFINER function through PostgREST (e.g. set_circle_photo). */
+    suspend fun rpc(token: String, name: String, body: JsonObject) {
+        ok("POST", "/rest/v1/rpc/$name", token, body)
+    }
+
     suspend fun function(token: String?, name: String, body: JsonObject): JsonObject {
         val text = ok("POST", "/functions/v1/$name", token, body)
         return runCatching { json.parseToJsonElement(text).jsonObject }.getOrDefault(JsonObject(emptyMap()))

@@ -351,6 +351,8 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             val notes = async { api.selectAll(t, "notifications", "select=*&user_id=eq.${me.id}&order=created_at.desc") }
             val names = async { runCatching { api.selectAll(t, "teacher_names", "select=*&order=name") }.getOrDefault(emptyList()) }
             val honors = async { runCatching { api.selectAll(t, "honor_cards", "select=*&order=created_at.desc") }.getOrDefault(emptyList()) }
+            // v3.8: more than one teacher per circle (an older server without the table = the single link only).
+            val circleTeachers = async { runCatching { api.selectAll(t, "circle_teachers", "select=circle_id,teacher_profile_id&order=created_at") }.getOrDefault(emptyList()) }
             // v3.6: only the admin reads the teachers' actions.
             val events = async { if (me.role != Role.ADMIN) emptyList() else runCatching { api.selectAll(t, "admin_events", "select=*&order=created_at.desc") }.getOrDefault(emptyList()) }
             val members = profiles.await().map { Rows.member(it) }.map { if (it.id == me.id) it.copy(allCircles = me.allCircles) else it }
@@ -365,7 +367,8 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             val fresh = CenterSnapshot(
                 center = centers.await().firstOrNull()?.let { Rows.center(it) } ?: CenterInfo(),
                 members = members,
-                circles = circles.await().map { Rows.circle(it) },
+                circles = circleTeachers.await().groupBy({ it["circle_id"]?.jsonPrimitive?.contentOrNull }, { it["teacher_profile_id"]?.jsonPrimitive?.contentOrNull }).let { ct ->
+                    circles.await().map { Rows.circle(it) }.map { c -> c.copy(teacherIds = ct[c.id].orEmpty().filterNotNull()) } },
                 students = allStudents.filter { it.active },
                 dismissed = allStudents.filterNot { it.active },
                 events = events.await().map { Rows.event(it) },
@@ -617,6 +620,120 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val bytes = runCatching { api.downloadObject(token(), "student-photos", path) }.getOrNull() ?: return null
         runCatching { f.writeBytes(bytes) }
         return bytes
+    }
+
+
+    // ---------------- v3.8: teachers' attendance, budget, subscriptions sheet, circle photo (online) ----------------
+    private suspend fun <T> net(what: String, block: suspend () -> T): T =
+        try { block() } catch (e: OfflineException) { throw ValidationError("$what يحتاج اتصالاً بالإنترنت") }
+    private fun JsonObject.str(k: String): String? = this[k]?.jsonPrimitive?.contentOrNull
+    private fun JsonObject.num(k: String): Double? = this[k]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()
+
+    override suspend fun teacherMarks(fromDay: String, toDay: String): Result<List<TeacherMark>> = guarded {
+        require(me().role == Role.ADMIN)
+        val rows = net("حضور المعلمين") { api.selectAll(token(), "teacher_attendance", "select=teacher_profile_id,day,status&day=gte.$fromDay&day=lte.$toDay&order=day.desc") }
+        Result.success(rows.mapNotNull { o -> val t = o.str("teacher_profile_id") ?: return@mapNotNull null
+            TeacherMark(t, o.str("day") ?: return@mapNotNull null, o.str("status") == "present") })
+    }
+
+    override suspend fun saveTeacherMarks(day: String, present: Map<String, Boolean>): Result<Int> = guarded {
+        val u = me(); require(u.role == Role.ADMIN)
+        if (present.isEmpty()) throw ValidationError("حدّد حاضر أو غائب لمعلم واحد على الأقل")
+        val rows = JsonArray(present.map { (tid, p) -> buildJsonObject {
+            put("center_id", center()); put("teacher_profile_id", tid); put("day", day); put("status", if (p) "present" else "absent"); put("marked_by", u.id)
+        } })
+        net("حفظ حضور المعلمين") { api.upsert(token(), "teacher_attendance", rows, "teacher_profile_id,day") }
+        Result.success(present.size)
+    }
+
+    override suspend fun budgetEntries(): Result<List<BudgetEntry>> = guarded {
+        require(me().role == Role.ADMIN)
+        val rows = net("الميزانية") { api.selectAll(token(), "budget_entries", "select=*&order=day.desc,created_at.desc") }
+        Result.success(rows.mapNotNull { o -> BudgetEntry(o.str("id") ?: return@mapNotNull null, o.str("kind") ?: "income", o.num("amount") ?: 0.0,
+            o.str("day") ?: "", o.str("student_id"), o.str("note") ?: "", Rows.ts(o.str("created_at"))) })
+    }
+
+    override suspend fun saveBudgetEntry(e: BudgetEntry, isNew: Boolean): Result<Unit> = guarded {
+        val u = me(); require(u.role == Role.ADMIN)
+        if (e.amount <= 0) throw ValidationError("اكتب مبلغاً أكبر من صفر")
+        if (!e.isIncome && e.note.isBlank()) throw ValidationError("اكتب ملاحظة الصرف")
+        val body = buildJsonObject {
+            put("kind", e.kind); put("amount", e.amount); put("day", e.day); put("student_id", e.studentId); put("note", e.note.trim().ifBlank { null })
+        }
+        net("حفظ الميزانية") {
+            if (isNew) api.insert(token(), "budget_entries", buildJsonObject { put("id", e.id); put("center_id", center()); put("created_by", u.id); body.forEach { (k, v) -> put(k, v) } })
+            else api.patch(token(), "budget_entries", "id=eq.${e.id}", body)
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun deleteBudgetEntry(id: String): Result<Unit> = guarded {
+        require(me().role == Role.ADMIN)
+        net("حذف القيد") { api.delete(token(), "budget_entries", "id=eq.$id") }
+        Result.success(Unit)
+    }
+
+    override suspend fun subscriptions(month: String): Result<List<SubscriptionMark>> = guarded {
+        val u = me(); require(u.role == Role.ADMIN || (u.role == Role.TEACHER && !u.allCircles))
+        val rows = net("كشف الاشتراكات") { api.selectAll(token(), "student_subscriptions", "select=student_id,month,paid,amount&month=eq.$month") }
+        Result.success(rows.mapNotNull { o -> SubscriptionMark(o.str("student_id") ?: return@mapNotNull null, o.str("month") ?: month, o.str("paid") == "true", o.num("amount")) })
+    }
+
+    override suspend fun saveSubscription(m: SubscriptionMark): Result<Unit> = guarded {
+        val u = me(); val d = st.cache
+        val s = d.student(m.studentId) ?: throw ValidationError("الطالب غير موجود")
+        require(u.role == Role.ADMIN || (u.role == Role.TEACHER && d.circle(s.circleId)?.taughtBy(u.id) == true))
+        if (m.paid && (m.amount ?: 0.0) < 0) throw ValidationError("المبلغ غير صحيح")
+        val row = buildJsonObject {
+            put("center_id", center()); put("student_id", m.studentId); put("month", m.month); put("paid", m.paid)
+            put("amount", if (m.paid) m.amount else null); put("marked_by", u.id); put("updated_at", Rows.iso(System.currentTimeMillis()))
+        }
+        net("حفظ الاشتراك") { api.upsert(token(), "student_subscriptions", JsonArray(listOf(row)), "student_id,month") }
+        Result.success(Unit)
+    }
+
+    override suspend fun setCirclePhoto(circleId: String, jpeg: ByteArray?): Result<Unit> = guarded {
+        val u = me(); val c = st.cache.circle(circleId) ?: throw ValidationError("الحلقة غير موجودة")
+        require(u.role == Role.ADMIN || (u.role == Role.TEACHER && !u.allCircles && c.taughtBy(u.id)))
+        val old = c.photoPath
+        val path = jpeg?.let { "${center()}/circles/$circleId/${UUID.randomUUID().toString().take(8)}.jpg" }
+        net("صورة الحلقة") {
+            if (jpeg != null && path != null) { api.uploadObject(token(), "student-photos", path, jpeg); photoFile(path).writeBytes(jpeg) }
+            api.rpc(token(), "set_circle_photo", buildJsonObject { put("cid", circleId); put("path", path) })
+        }
+        if (old != null && old != path) runCatching { api.deleteObject(token(), "student-photos", old); photoFile(old).delete() }
+        lock.withLock { st = st.copy(cache = st.cache.copy(circles = st.cache.circles.map { if (it.id == circleId) it.copy(photoPath = path) else it })); save() }
+        publish()
+        Result.success(Unit)
+    }
+
+    override suspend fun circlePhoto(path: String): ByteArray? = studentPhoto(path)
+
+    override suspend fun setCircleTeachers(circleId: String, teacherIds: List<String>): Result<Unit> = guarded {
+        require(me().role == Role.ADMIN)
+        val d = st.cache
+        d.circle(circleId) ?: throw ValidationError("الحلقة غير موجودة")
+        val ids = teacherIds.distinct()
+        val first = ids.firstOrNull()
+        runCatching { syncNow() }   // a just-created circle must reach the server before its teacher links
+        net("تعديل معلمي الحلقة") {
+            val t = token()
+            // the first teacher stays the circle's single teacher (older builds and the reports read it)
+            api.patch(t, "circles", "id=eq.$circleId", buildJsonObject {
+                put("teacher_id", first); put("teacher_name", d.member(first)?.fullName); put("updated_at", Rows.iso(System.currentTimeMillis()))
+            })
+            api.delete(t, "circle_teachers", "circle_id=eq.$circleId" + if (ids.isEmpty()) "" else "&teacher_profile_id=not.in.(${ids.joinToString(",")})")
+            if (ids.isNotEmpty()) api.upsert(t, "circle_teachers", JsonArray(ids.map { id -> buildJsonObject { put("circle_id", circleId); put("teacher_profile_id", id) } }),
+                "circle_id,teacher_profile_id", ignore = true)
+        }
+        lock.withLock {
+            st = st.copy(cache = st.cache.copy(circles = st.cache.circles.map {
+                if (it.id == circleId) it.copy(teacherId = first, teacherName = d.member(first)?.fullName, teacherIds = ids) else it }))
+            save()
+        }
+        publish()
+        runCatching { syncNow() }
+        Result.success(Unit)
     }
 
     override suspend fun setAccessPassword(target: Role, password: String): Result<Unit> = guarded {

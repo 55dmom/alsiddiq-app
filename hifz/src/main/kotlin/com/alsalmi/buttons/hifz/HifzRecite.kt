@@ -115,6 +115,12 @@ internal fun HfRecitePanel(r: HfReciteState) {
     val recognizer = remember { if (SpeechRecognizer.isRecognitionAvailable(ctx)) SpeechRecognizer.createSpeechRecognizer(ctx) else null }
     DisposableEffect(recognizer) { onDispose { runCatching { recognizer?.destroy() } } }
     var wantListen by remember { mutableStateOf(false) }
+    // His request (Nov 8, 9:42 PM): «حق الصوت في وضع الحفظ يفصل ما يقبل الصوت سريع» — keep listening until he taps stop:
+    // after every result / silence / recoverable error the recogniser starts again by itself (a short pause first).
+    val handler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    DisposableEffect(Unit) { onDispose { handler.removeCallbacksAndMessages(null) } }
+    var restartLater: () -> Unit = {}
+    var softErrors = 0
 
     fun startOnce() {
         val rz = recognizer ?: return
@@ -124,14 +130,17 @@ internal fun HfRecitePanel(r: HfReciteState) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-SA")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000L)
         }
-        runCatching { rz.startListening(i) }.onFailure { r.message = "ما قدرنا نشغّل المايك. جرّب مرة ثانية."; wantListen = false; r.listening = false }
+        runCatching { rz.cancel(); rz.startListening(i) }.onFailure { r.message = "ما قدرنا نشغّل المايك. جرّب مرة ثانية."; wantListen = false; r.listening = false }
     }
+    restartLater = { handler.removeCallbacksAndMessages(null); handler.postDelayed({ if (wantListen && !r.finished) startOnce() }, 250L) }
 
     DisposableEffect(recognizer) {
         recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { r.listening = true; r.message = "" }
+            override fun onReadyForSpeech(params: Bundle?) { r.listening = true; r.message = ""; softErrors = 0 }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
@@ -143,17 +152,17 @@ internal fun HfRecitePanel(r: HfReciteState) {
             override fun onResults(b: Bundle?) {
                 b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { r.hear(it, final = true) }
                 r.listening = false
-                if (r.finished) { wantListen = false; r.message = "ما شاء الله! سمّعت المقطع كامل." } else if (wantListen) startOnce()
+                if (r.finished) { wantListen = false; r.message = "ما شاء الله! سمّعت المقطع كامل." } else if (wantListen) restartLater()
             }
             override fun onError(error: Int) {
                 r.listening = false
                 when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (wantListen && !r.finished) startOnce()
+                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_CLIENT -> if (wantListen && !r.finished) restartLater()
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> { wantListen = false; r.message = "ما نقدر نسمعك بدون إذن المايك. فعّله من إعدادات الجوال ← التطبيقات ← الأذونات." }
                     SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER ->
                         { wantListen = false; r.message = "التعرّف على الصوت يحتاج إنترنت في جوالك (أو نزّل العربية للاستخدام بدون نت من إعدادات الكتابة بالصوت)." }
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> { if (wantListen) startOnce() }
-                    else -> { wantListen = false; r.message = "صار خطأ في المايك. اضغط عليه وجرّب مرة ثانية." }
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> { if (wantListen) restartLater() }
+                    else -> { if (wantListen && !r.finished && ++softErrors <= 20) restartLater() else { wantListen = false; r.message = "صار خطأ في المايك. اضغط عليه وجرّب مرة ثانية." } }
                 }
             }
         })
@@ -167,7 +176,7 @@ internal fun HfRecitePanel(r: HfReciteState) {
 
     fun tapMic() {
         if (recognizer == null) { r.message = "التعرّف على الصوت مو متوفر في جوالك. ثبّت تطبيق Google (أو فعّل الكتابة بالصوت) وجرّب مرة ثانية."; return }
-        if (wantListen) { wantListen = false; r.listening = false; runCatching { recognizer.stopListening() }; return }
+        if (wantListen) { wantListen = false; r.listening = false; handler.removeCallbacksAndMessages(null); runCatching { recognizer.stopListening() }; return }
         if (r.finished) r.reset()
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { wantListen = true; startOnce() }
         else permission.launch(Manifest.permission.RECORD_AUDIO)

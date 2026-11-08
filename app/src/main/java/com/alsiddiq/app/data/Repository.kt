@@ -112,6 +112,21 @@ interface CenterRepository {
     suspend fun saveAboutButton(b: AboutButton): Result<Unit>
     suspend fun deleteAboutButton(id: String): Result<Unit>
     suspend fun moveAboutButton(id: String, up: Boolean): Result<Unit>
+
+    // v3.8 (admin page): teachers' attendance, the budget, the monthly subscriptions sheet, and the circle's photo («لوحة الحلقة»).
+    // Online reads/writes (no offline queue). Teachers' attendance and the budget are the admin's only.
+    suspend fun teacherMarks(fromDay: String, toDay: String): Result<List<TeacherMark>> = Result.failure(UnsupportedOperationException())
+    suspend fun saveTeacherMarks(day: String, present: Map<String, Boolean>): Result<Int> = Result.failure(UnsupportedOperationException())
+    suspend fun budgetEntries(): Result<List<BudgetEntry>> = Result.failure(UnsupportedOperationException())
+    suspend fun saveBudgetEntry(e: BudgetEntry, isNew: Boolean): Result<Unit> = Result.failure(UnsupportedOperationException())
+    suspend fun deleteBudgetEntry(id: String): Result<Unit> = Result.failure(UnsupportedOperationException())
+    suspend fun subscriptions(month: String): Result<List<SubscriptionMark>> = Result.failure(UnsupportedOperationException())
+    suspend fun saveSubscription(m: SubscriptionMark): Result<Unit> = Result.failure(UnsupportedOperationException())
+    /** v3.8: the circle's teachers (admin only). The first one is also kept as the circle's single teacher for older builds. */
+    suspend fun setCircleTeachers(circleId: String, teacherIds: List<String>): Result<Unit> = Result.failure(UnsupportedOperationException())
+    /** jpeg = null removes it. Admin: any circle; a teacher: his own circle. */
+    suspend fun setCirclePhoto(circleId: String, jpeg: ByteArray?): Result<Unit> = Result.failure(UnsupportedOperationException())
+    suspend fun circlePhoto(path: String): ByteArray? = null
 }
 
 data class ReauthTarget(val id: String, val name: String, val role: Role, val waiting: Int)

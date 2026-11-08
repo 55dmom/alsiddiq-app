@@ -168,7 +168,6 @@ private fun AboutView(page: AboutPage, text: String) {
             item { SectionHeader("تواصل معنا") }
             items(AboutLocal.sorted(page.buttons), key = { it.id }) { b -> ContactButton(b) { openUri(ctx, AboutText.uri(b.kind, b.value)) } }
         }
-        item { Spacer(Modifier.height(4.dp)); DeveloperRow() }
         if (!page.fromServer) item { Text("نسخة محفوظة على الجهاز", style = MaterialTheme.typography.labelSmall, color = Brand.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
     }
 }

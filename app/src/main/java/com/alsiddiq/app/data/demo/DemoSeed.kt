@@ -9,7 +9,7 @@ import kotlin.random.Random
 
 /** Sample data for design and testing only. Never used once the central database is connected. */
 object DemoSeed {
-    const val VERSION = 10
+    const val VERSION = 11
     /** Demo passwords (sample data only): general view, admin, and (v3.3) each teacher's own password. */
     const val VIEWER_PASSWORD = "111111"
     const val ADMIN_PASSWORD = "222222"
@@ -31,8 +31,8 @@ object DemoSeed {
         val teacherNames = listOf(TeacherName("tn1", n1), TeacherName("tn2", n2), TeacherName("tn3", n3))
 
         val circles = listOf(
-            Circle("c1", "حلقة أبي بكر الصديق", t1.id, "متقدم", "بعد العصر • السبت–الأربعاء", 15, teacherName = n1, feeYer = 5000, feePeriod = "monthly"),
-            Circle("c2", "حلقة عمر بن الخطاب", t2.id, "متوسط", "بعد العصر • السبت–الأربعاء", 15, teacherName = n2, feeYer = 12000, feePeriod = "term"),
+            Circle("c1", "حلقة أبي بكر الصديق", t1.id, "متقدم", "بعد العصر • السبت–الأربعاء", 15, teacherName = n1, feeYer = 5000, feePeriod = "monthly", photoPath = "demo-seed/circle_c1.jpg"),
+            Circle("c2", "حلقة عمر بن الخطاب", t2.id, "متوسط", "بعد العصر • السبت–الأربعاء", 15, teacherName = n2, feeYer = 12000, feePeriod = "term", teacherIds = listOf(t2.id, t3.id)),
             Circle("c3", "حلقة البراعم", t3.id, "مبتدئ", "بعد المغرب • الأحد–الخميس", 20, teacherName = n3),
             Circle("c4", "حلقة الفجر للكبار", t1.id, "مراجعة", "بعد الفجر • يومياً", 12, teacherName = n1)
         )

@@ -64,12 +64,13 @@ fun ViewerHome(user: Member, nav: NavHostController) {
     // His request (Nov 8, 5:42 PM): a realistic, blurred background photo on the home screen (not inside his tools).
     LazyColumn(Modifier.fillMaxSize().homeBackdrop(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            HomeHeader("السلام عليكم ورحمة الله", snap.center.name, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
+            HomeHeader("السلام عليكم ورحمة الله وبركاته", snap.center.name, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 StatusBanners(Modifier.padding(top = 12.dp))
                 com.alsiddiq.app.ui.components.OccasionBanner(Modifier.padding(top = 12.dp))
+                WeeklyStarCard(snap, Modifier.padding(top = 12.dp))   // v3.8 «وسام الشرف لهذا الأسبوع» (automatic)
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Brand.GoldSoft).padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -89,8 +90,6 @@ fun ViewerHome(user: Member, nav: NavHostController) {
                     StatTile("آيات الأسبوع", "${stats.ayatThisWeek}", Icons.Outlined.AutoStories, Brand.Navy, Modifier.weight(1f))
                     StatTile("حضور اليوم", if (stats.attendanceToday > 0) Fmt.pct(stats.attendanceToday) else "—", Icons.Outlined.FactCheck, Brand.Maroon, Modifier.weight(1f))
                 }
-                SectionHeader("الأدوات")
-                ToolsRow()
                 SectionHeader("التفاعل", "التقارير") { nav.navigate("reports") }
                 AppCard {
                     Text("عدد السجلات يومياً — آخر 14 يوماً", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
@@ -168,8 +167,6 @@ fun ViewerSettingsScreen(user: Member, nav: NavHostController) {
                 BigSectionButton("المعلمين", "كلمة سرك الخاصة\nلحلقتك", Icons.Outlined.CoPresent, Brand.Maroon, Brand.MaroonSoft, Modifier.weight(1f)) { nav.navigate("role_login/TEACHER") }
             }
         }
-        item { SectionHeader("الأدوات") }
-        items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
         item { SectionHeader("المظهر") }
         item { ThemesMenuItem() }
         item { com.alsiddiq.app.ui.about.CenterInfoEntries() }
@@ -213,12 +210,11 @@ fun TeacherMoreScreen(user: Member, nav: NavHostController) {
         item { SectionHeader("تقرير اليوم") }
         if (mine.isEmpty()) item { EmptyState("لم تُسند لك حلقة بعد", "تسند الإدارة الحلقة لكل معلم من الإعدادات ← الإدارة ← المعلمون") }
         else item { MenuRow("تقرير اليوم", "اختر الحلقة: كم حفظوا اليوم ومن غاب", Icons.Outlined.Summarize, Brand.Maroon) { nav.navigate("circle_report/${mine.first().id}") } }
-        item { SectionHeader("الأدوات") }
-        items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
         item { SectionHeader("المظهر") }
         item { ThemesMenuItem() }
         item { com.alsiddiq.app.ui.about.CenterInfoEntries() }
         item { SectionHeader("أدوات المعلم") }
+        if (mine.isNotEmpty()) item { MenuRow("الاشتراكات الشهرية", "كشف: سلم أو لم يسلم، مع المبلغ", Icons.Outlined.Payments, Brand.Green) { nav.navigate("subscriptions") } }
         item { MenuRow("طالب جديد", "إضافة سجل طالب في حلقتك", Icons.Outlined.PersonAdd) { nav.navigate("student_edit/new" + (mine.firstOrNull()?.let { "?circle=${it.id}" } ?: "")) } }
         item { MenuRow("كل الحلقات", "عرض فقط: حلقات المعلمين الآخرين وطلابهم", Icons.Outlined.Groups) { nav.navigate("circles") } }
         item { MenuRow("التقارير والإحصائيات", "رسوم الحلقات", Icons.Outlined.Insights) { nav.navigate("reports") } }

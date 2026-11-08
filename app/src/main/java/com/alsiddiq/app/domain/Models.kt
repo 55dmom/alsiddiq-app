@@ -40,8 +40,16 @@ data class Circle(
     val teacherName: String? = null,
     /** v3.5: the fee in Yemeni rial (null = not set) and its period: monthly | term | once. Set by the admin only. */
     val feeYer: Int? = null,
-    val feePeriod: String? = null
-)
+    val feePeriod: String? = null,
+    /** v3.8: the circle's own photo, its «لوحة الحلقة» (storage path; null = the current look). */
+    val photoPath: String? = null,
+    /** v3.8: more than one teacher per circle (circle_teachers). [teacherId] stays the first one, for older builds. */
+    val teacherIds: List<String> = emptyList()
+) {
+    /** Every teacher of this circle: the old single link plus the v3.8 list. */
+    fun allTeacherIds(): List<String> = (listOfNotNull(teacherId) + teacherIds).distinct()
+    fun taughtBy(memberId: String?): Boolean = memberId != null && (teacherId == memberId || memberId in teacherIds)
+}
 
 @Serializable
 enum class StudentStatus(val label: String) { ACTIVE("منتظم"), PAUSED("متوقف مؤقتاً"), GRADUATED("خاتم") }
@@ -218,8 +226,10 @@ data class CenterSnapshot(
     fun activeTeacherNames(): List<TeacherName> = teacherNames.filter { it.active }.sortedBy { it.name }
     fun teacherCount(): Int = activeTeacherNames().size.takeIf { it > 0 } ?: teachers().size
     /** The teacher shown on a circle: its name, else the old account's name. */
-    fun teacherOf(c: Circle?): String? = c?.teacherName?.takeIf { it.isNotBlank() } ?: member(c?.teacherId)?.takeIf { !it.allCircles }?.fullName
+    fun teacherOf(c: Circle?): String? =
+        c?.allTeacherIds()?.takeIf { it.size > 1 }?.mapNotNull { id -> member(id)?.takeIf { !it.allCircles && it.active }?.fullName }?.takeIf { it.isNotEmpty() }?.joinToString("، ")
+            ?: c?.teacherName?.takeIf { it.isNotBlank() } ?: member(c?.teacherId)?.takeIf { !it.allCircles }?.fullName
     /** Who recorded something: the picked name, else the account's name. */
     fun recorder(byName: String?, accountId: String?): String? = byName?.takeIf { it.isNotBlank() } ?: member(accountId)?.fullName
-    fun circlesOf(teacherId: String): List<Circle> = circles.filter { it.teacherId == teacherId }
+    fun circlesOf(teacherId: String): List<Circle> = circles.filter { it.taughtBy(teacherId) }
 }

@@ -110,14 +110,7 @@ private fun GateFrame(onBack: (() -> Unit)? = null, tools: Boolean = false, cont
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "رجوع", tint = Color.White) }
                 }
                 Spacer(Modifier.height(4.dp))
-            } else if (tools) {
-                // «الأدوات»: his side buttons, open to everyone before any password.
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    com.alsiddiq.app.ui.components.ToolsButton()
-                    com.alsiddiq.app.ui.components.ThemesButton()
-                }
-                Spacer(Modifier.height(8.dp))
-            } else Spacer(Modifier.height(52.dp))
+            } else Spacer(Modifier.height(52.dp))   // his request (Nov 8, 9:42 PM): no top buttons here any more («الأدوات» is under the card)
             // the logo in a soft gold ring with a glow
             Box(Modifier.size(172.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.matchParentSize().background(Brush.radialGradient(listOf(GateGold[1].copy(alpha = 0.32f), Color.Transparent))))
@@ -202,7 +195,7 @@ fun LoginScreen() {
             Surface(onClick = { com.alsalmi.buttons.contact.ContactDeveloperActivity.start(gateCtx) }, shape = RoundedCornerShape(50), color = Brand.Card, shadowElevation = 2.dp, modifier = Modifier.weight(1f)) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(Icons.AutoMirrored.Outlined.Send, null, tint = Color(0xFF29A1DE), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-                    Text("تواصل مع المطوّر", color = Brand.Navy, style = MaterialTheme.typography.labelLarge)
+                    Text("المطوّر", color = Brand.Navy, style = MaterialTheme.typography.labelLarge)   // opens «تواصل مع المطوّر»
                 }
             }
         }
