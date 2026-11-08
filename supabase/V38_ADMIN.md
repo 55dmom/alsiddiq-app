@@ -121,6 +121,9 @@ Client (same as Android):
 - Hifz «تسميع»: the mic keeps listening until the user taps stop — the recogniser restarts by itself after every result,
   silence or recoverable error; silence lengths 5000 ms (complete and possibly-complete), partial results on; matching unchanged.
 - Logo: the round white disc inside the gold ring (already done in iOS build 25).
+- Illustrated pictures inside the app's own buttons (10:15 PM «صور تعبر عن الزرار نفسه»): the shared set in files/alsiddiq_app/icons/<name>.png
+  (Android: 192 px webp, drawable-nodpi/art_<name>.webp) replaces the Material glyph in menu rows, home tiles/quick actions, the gate
+  section buttons and the about/developer rows, looked up by the button title. The bottom bar keeps simple glyphs. His tool modules untouched.
 - Home greeting (10:15 PM «خليه سلام كامل»): «السلام عليكم ورحمة الله وبركاته» on every home header, up to two lines on 360dp; the name line under it unchanged.
 
 ## 6) More than one teacher per circle — his words 10:05 PM (migration 0019, LIVE, applied with NO backfill: 0 rows written)

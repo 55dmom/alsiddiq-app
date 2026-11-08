@@ -145,7 +145,7 @@ private fun BigSectionButton(title: String, sub: String, icon: androidx.compose.
         modifier = modifier.border(1.dp, Brand.Line, RoundedCornerShape(22.dp))) {
         Column(Modifier.padding(vertical = 22.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(60.dp).clip(RoundedCornerShape(18.dp)).background(soft), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = color, modifier = Modifier.size(32.dp))
+                ArtOrIcon(title, icon, color, 60.dp, 32.dp)
             }
             Spacer(Modifier.height(10.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, color = color)

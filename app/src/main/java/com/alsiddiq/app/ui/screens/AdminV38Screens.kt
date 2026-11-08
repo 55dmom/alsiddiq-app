@@ -390,7 +390,7 @@ fun WeeklyStarCard(snap: CenterSnapshot, modifier: Modifier = Modifier) {
     AppCard(modifier.fillMaxWidth(), padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(Brand.GoldSoft), contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.MilitaryTech, null, tint = Brand.Gold)
+                ArtOrIcon("وسام الشرف لهذا الأسبوع", Icons.Outlined.MilitaryTech, Brand.Gold, 34.dp)
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {

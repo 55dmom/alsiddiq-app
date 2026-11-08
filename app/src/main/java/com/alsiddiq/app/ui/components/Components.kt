@@ -92,7 +92,7 @@ fun StatTile(
         Box(
             Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
-        ) { Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp)) }
+        ) { ArtOrIcon(label, icon, tint, 38.dp, 22.dp) }
         Spacer(Modifier.height(10.dp))
         Text(value, style = MaterialTheme.typography.headlineSmall, color = Brand.Ink, maxLines = 1)
         Text(label, style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)

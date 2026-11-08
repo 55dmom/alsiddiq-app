@@ -147,7 +147,7 @@ fun QuickAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVe
     AppCard(modifier, onClick = onClick, padding = 10.dp) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(40.dp).clip(CircleShape).background(Brand.MaroonSoft), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = Brand.Maroon)
+                ArtOrIcon(label, icon, Brand.Maroon, 40.dp)
             }
             Spacer(Modifier.height(6.dp))
             Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, textAlign = TextAlign.Center)
@@ -226,7 +226,7 @@ fun MenuRow(title: String, sub: String, icon: androidx.compose.ui.graphics.vecto
     AppCard(onClick = onClick, padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = tint)
+                ArtOrIcon(title, icon, tint, 40.dp)
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
