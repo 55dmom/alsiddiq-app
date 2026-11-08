@@ -95,6 +95,7 @@ fun StudentDetailScreen(user: Member, nav: NavHostController, id: String) {
     }, fab = {
         if (canRecord) AddFab("تسجيل تسميع") { nav.navigate("record/${s.id}") }
     }) {
+        item { StudentPhotoCard(s, Permissions.canEditStudent(user, s, snap)) }
         studentDashboard(this, s, snap, nav, user)
     }
 }
@@ -160,7 +161,7 @@ fun studentDashboard(scope: androidx.compose.foundation.lazy.LazyListScope, s: S
             SectionHeader("بيانات الطالب")
             AppCard {
                 KeyValueRow("الحلقة", snap.circle(s.circleId)?.name ?: "—")
-                KeyValueRow("المعلم", snap.member(snap.circle(s.circleId)?.teacherId)?.fullName ?: "—")
+                KeyValueRow("المعلم", snap.teacherOf(snap.circle(s.circleId)) ?: "—")
                 KeyValueRow("تاريخ الالتحاق", runCatching { Fmt.date(LocalDate.parse(s.joinedOn)) }.getOrDefault(s.joinedOn))
                 if (s.birthYear != null) KeyValueRow("سنة الميلاد", "${s.birthYear}")
                 KeyValueRow("الحالة", s.status.label)

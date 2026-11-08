@@ -38,10 +38,12 @@ shot 06_viewer_student viewer student/s1
 shot 07_admin_panel admin more
 shot 08_admin_home admin home
 shot 09_admin_teachers admin teachers
-shot 10_admin_teacher_edit admin teacher_edit/m-t1
 shot 11_admin_passwords admin passwords
+shot 11b_admin_circle_edit admin circle_edit/c1
 shot 12_teacher_home teacher home
 shot 13_teacher_circle teacher circle/c1
+shot 13b_teacher_circle_other teacher circle/c3
+shot 13c_teacher_students teacher students
 shot 14_teacher_record teacher record/s1
 shot 15_teacher_attendance teacher attendance
 shot 16_teacher_report teacher circle_report/c1

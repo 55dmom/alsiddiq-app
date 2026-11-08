@@ -20,7 +20,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = buildNumber
-        versionName = "3.0.$buildNumber"
+        versionName = "3.1.$buildNumber"
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

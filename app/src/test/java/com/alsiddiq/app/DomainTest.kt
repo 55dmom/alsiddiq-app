@@ -17,6 +17,22 @@ class DomainTest {
     private val s2 = Student("s2", "S2", circleId = "c2", joinedOn = "2026-01-01")
     private val snap = CenterSnapshot(members = listOf(admin, teacher, other, viewer), circles = listOf(c1, c2), students = listOf(s1, s2))
 
+    @Test fun sharedTeachersPasswordOpensEveryCircle() {
+        val shared = Member("tt", "المعلمون", "", Role.TEACHER, allCircles = true)
+        assertTrue(Permissions.canRecordFor(shared, s1, snap))
+        assertTrue(Permissions.canRecordFor(shared, s2, snap))
+        assertTrue(Permissions.canEditStudent(shared, s2, snap))
+        assertTrue(Permissions.canAddStudentTo(shared, "c2", snap))
+        assertTrue(Permissions.canAddStudentTo(shared, null, snap))
+        assertTrue(Permissions.teachesCircle(shared, c2))
+        assertEquals(listOf("c1", "c2"), Permissions.visibleCircles(shared, snap).map { it.id })
+        assertEquals(listOf("s1", "s2"), Permissions.visibleStudents(shared, snap).map { it.id })
+        assertFalse(Permissions.canManageStudents(shared))
+        assertFalse(Permissions.canManageMembers(shared))
+        assertEquals("أحمد", snap.recorder("أحمد", "tt"))
+        assertEquals("Admin", snap.recorder(null, "a"))
+    }
+
     @Test fun permissions() {
         assertTrue(Permissions.canRecordFor(admin, s1, snap))
         assertTrue(Permissions.canRecordFor(teacher, s1, snap))

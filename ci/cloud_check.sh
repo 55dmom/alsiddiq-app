@@ -1,5 +1,5 @@
 #!/bin/bash
-# v3 end-to-end check of the APK against the REAL central database, with throwaway passwords and rows.
+# v3.1 end-to-end check of the APK against the REAL central database, with throwaway passwords and rows.
 # Runs only while no admin password exists yet (before the owner's own first-time setup).
 # Everything it creates is removed by the maintainer right after the run.
 set -x
@@ -7,8 +7,8 @@ APK="$1"
 PKG=com.alsiddiq.app.debug
 ACT=com.alsiddiq.app.MainActivity
 U="$SUPABASE_URL"; K="$SUPABASE_ANON_KEY"
-AP=A$(openssl rand -hex 6); VP=V$(openssl rand -hex 6); TA=T$(openssl rand -hex 6); TB=B$(openssl rand -hex 6)
-for p in "$AP" "$VP" "$TA" "$TB"; do echo "::add-mask::$p"; done
+AP=A$(openssl rand -hex 6); VP=V$(openssl rand -hex 6); TP=T$(openssl rand -hex 6); TP2=N$(openssl rand -hex 6)
+for p in "$AP" "$VP" "$TP" "$TP2"; do echo "::add-mask::$p"; done
 mkdir -p shots
 LOG=shots/cloud_selftest.txt
 adb uninstall $PKG >/dev/null 2>&1
@@ -20,57 +20,97 @@ adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
 
 fn() { curl -s -X POST "$U/functions/v1/access" -H "apikey: $K" -H "Authorization: Bearer ${2:-$K}" -H "Content-Type: application/json" -d "$1"; echo; }
+fncode() { curl -s -o /dev/null -w "%{http_code}" -X POST "$U/functions/v1/access" -H "apikey: $K" -H "Authorization: Bearer ${2:-$K}" -H "Content-Type: application/json" -d "$1"; }
 rest() { curl -s -X POST "$U/rest/v1/$1" -H "apikey: $K" -H "Authorization: Bearer $2" -H "Content-Type: application/json" -H "Prefer: return=minimal" -d "$3" -w " HTTP %{http_code}\n"; }
 get() { curl -s "$U/rest/v1/$1" -H "apikey: $K" -H "Authorization: Bearer $2"; echo; }
 jget() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)"; }
 uid() { python3 -c 'import uuid;print(uuid.uuid4())'; }
 shot() { nodlg; sleep 1; adb exec-out screencap -p > "shots/$1.png"; }
 app() { adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT "$@"; }
+fields() { adb exec-out uiautomator dump /dev/tty 2>/dev/null | python3 -c '
+import sys,re
+x=sys.stdin.read()
+for m in re.finditer(r"class=\"android.widget.EditText\"[^>]*bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"",x):
+    print("%d %d"%((int(m[1])+int(m[3]))//2,(int(m[2])+int(m[4]))//2))'; }
+screen_has() { adb exec-out uiautomator dump /dev/tty 2>/dev/null | grep -c "$1"; }
+type_into_first() { # password : tap the first EditText, type, Enter
+  local B; B=$(fields | head -1); echo "field at: $B" | tee -a $LOG
+  if [ -n "$B" ]; then adb shell input tap $B; sleep 1; adb shell input text "$1"; sleep 1; adb shell input keyevent 66; fi
+}
 
 ST=$(fn '{"action":"status"}'); echo "$ST"
 case "$ST" in *'"needs_setup":true'*) ;; *) echo "An admin password already exists (owner set up) - skipping the live check."; exit 0;; esac
 
-# 1) Fresh install -> the first-time setup screen (centre name + admin password + general password)
+# 1) Fresh install -> the first-time setup screen; type the three passwords on the real screen (Tab moves to the next field)
 app; sleep 16; shot 20_cloud_setup
-echo "== setup (server function, same call the setup screen makes)" | tee -a $LOG
-SJ=$(fn "{\"action\":\"setup\",\"center_name\":\"مركز الصديق لتعليم القرآن الكريم\",\"admin_password\":\"$AP\",\"viewer_password\":\"$VP\"}")
+F=$(fields | sed -n 2p); echo "setup: admin field at $F" | tee -a $LOG
+if [ -n "$F" ]; then
+  adb shell input tap $F; sleep 1
+  for v in "$AP" "$AP" "$VP" "$VP" "$TP" "$TP"; do adb shell input text "$v"; sleep 0.6; adb shell input keyevent 61; sleep 0.6; done
+  shot 20b_cloud_setup_filled
+  adb shell input keyevent 66; sleep 2
+  # press the save button if Enter didn't submit
+  BTN=$(adb exec-out uiautomator dump /dev/tty 2>/dev/null | python3 -c '
+import sys,re
+x=sys.stdin.read(); m=re.search(r"text=\"حفظ وبدء الاستخدام\"[^>]*bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"",x)
+print("%d %d"%((int(m[1])+int(m[3]))//2,(int(m[2])+int(m[4]))//2) if m else "")')
+  [ -n "$BTN" ] && adb shell input tap $BTN
+  sleep 12; shot 20c_cloud_after_setup
+fi
+ST2=$(fn '{"action":"status"}'); echo "status after typing setup: $ST2" | tee -a $LOG
+case "$ST2" in *'"needs_setup":false'*) echo "SETUP THROUGH THE REAL SCREEN: ok" | tee -a $LOG ;;
+  *) echo "setup screen typing did not complete; using the same server call the form makes" | tee -a $LOG
+     fn "{\"action\":\"setup\",\"center_name\":\"مركز الصديق لتعليم القرآن الكريم\",\"admin_password\":\"$AP\",\"viewer_password\":\"$VP\",\"teachers_password\":\"$TP\"}" > /dev/null ;; esac
+SJ=$(fn "{\"action\":\"login\",\"kind\":\"admin\",\"password\":\"$AP\"}")
 AT=$(echo "$SJ" | jget 'd["session"]["access_token"]'); echo "::add-mask::$AT"
-echo "setup role: $(echo "$SJ" | jget 'd["profile"]["access_kind"]')" | tee -a $LOG
-echo "setup again: $(fn "{\"action\":\"setup\",\"admin_password\":\"$TA\",\"viewer_password\":\"$TB\"}")" | tee -a $LOG
+echo "admin login: $(echo "$SJ" | jget 'd["profile"]["access_kind"]')  has_teachers_password: $(fn '{"action":"status"}' | jget 'd["has_teachers_password"]')" | tee -a $LOG
 CID=$(get "centers?select=id" "$AT" | jget 'd[0]["id"]')
 C1=$(uid); C2=$(uid); S1=$(uid); S2=$(uid)
-rest circles "$AT" "[{\"id\":\"$C1\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة أ\"},{\"id\":\"$C2\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة ب\"}]" | tee -a $LOG
+rest circles "$AT" "[{\"id\":\"$C1\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة أ\",\"teacher_name\":\"TEST الشيخ أحمد\"},{\"id\":\"$C2\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة ب\",\"teacher_name\":\"TEST الأستاذ خالد\"}]" | tee -a $LOG
 rest students "$AT" "[{\"id\":\"$S1\",\"center_id\":\"$CID\",\"full_name\":\"TEST طالب أ\",\"circle_id\":\"$C1\"},{\"id\":\"$S2\",\"center_id\":\"$CID\",\"full_name\":\"TEST طالب ب\",\"circle_id\":\"$C2\"}]" | tee -a $LOG
-fn "{\"action\":\"teacher_save\",\"name\":\"TEST معلم أ\",\"circle_id\":\"$C1\",\"password\":\"$TA\"}" "$AT" | tee -a $LOG
-fn "{\"action\":\"teacher_save\",\"name\":\"TEST معلم ب\",\"circle_id\":\"$C2\",\"password\":\"$TB\"}" "$AT" | tee -a $LOG
+rest teacher_names "$AT" "[{\"center_id\":\"$CID\",\"name\":\"TEST الشيخ أحمد\"},{\"center_id\":\"$CID\",\"name\":\"TEST الأستاذ خالد\"}]" | tee -a $LOG
 
-# 2) The real password screen: type the general password with the keyboard and press Enter
+# 2) The real password screen: type the general password
 app; sleep 14; nodlg; sleep 1; shot 21_cloud_password_screen
-B=$(adb exec-out uiautomator dump /dev/tty 2>/dev/null | python3 -c '
-import sys,re
-x=sys.stdin.read(); m=re.search(r"class=\"android.widget.EditText\"[^>]*bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"",x)
-print("%d %d"%((int(m[1])+int(m[3]))//2,(int(m[2])+int(m[4]))//2) if m else "")')
-echo "password field at: $B" | tee -a $LOG
-if [ -n "$B" ]; then adb shell input tap $B; sleep 1; adb shell input text "$VP"; sleep 1; adb shell input keyevent 66; sleep 12; fi
+type_into_first "$VP"; sleep 12
 shot 22_cloud_viewer_home_after_typing
-adb exec-out uiautomator dump /dev/tty 2>/dev/null | grep -o 'وضع العرض[^"]*' | head -1 | sed 's/^/viewer screen text: /' | tee -a $LOG
+echo "viewer screen shows read-only banner: $(screen_has 'وضع العرض')" | tee -a $LOG
 
-# 3) Viewer: the app's own writes are not offered; raw writes straight to the server are refused
-app --es login_kind viewer --es login_pass "$VP" --ez selftest true --es try_student "$S1:$C1"; sleep 24
-app --es login_kind viewer --es login_pass "$VP" --es route viewer_settings; sleep 12; shot 23_cloud_viewer_settings
-# 4) Teacher A: writes for his own student; raw writes on teacher B's student are refused
-app --es login_kind teacher --es login_pass "$TA" --es viewer_pass "$VP" --ez selftest true --es try_student "$S2:$C2"; sleep 26; shot 24_cloud_teacher_a_home
-# 5) Teacher B: raw writes on teacher A's student are refused
-app --es login_kind teacher --es login_pass "$TB" --es viewer_pass "$VP" --ez selftest true --es try_student "$S1:$C1"; sleep 26
-# 6) Admin: may write anywhere
+# 3) Settings -> «المعلمين»: type the shared teachers' password on the real screen
+app --es login_kind viewer --es login_pass "$VP" --es route role_login/TEACHER; sleep 14; shot 23_cloud_teachers_box
+type_into_first "$TP"; sleep 14
+shot 24_cloud_teachers_home_after_typing
+echo "teachers section after typing: $(screen_has 'قسم المعلمين')" | tee -a $LOG
+
+# 4) Viewer: app writes not offered; raw writes refused; viewer photo write refused
+app --es login_kind viewer --es login_pass "$VP" --ez selftest true --es try_student "$S1:$C1"; sleep 26
+# 5) Shared teachers: app writes for a student in EACH circle + photo through the app; raw probes on circle B's student
+app --es login_kind teacher --es login_pass "$TP" --es viewer_pass "$VP" --ez selftest true --ez photo_test true --es try_student "$S2:$C2"; sleep 32
+app --es login_kind teacher --es login_pass "$TP" --es viewer_pass "$VP" --es route circles; sleep 14; shot 25_cloud_teachers_all_circles
+app --es login_kind teacher --es login_pass "$TP" --es viewer_pass "$VP" --es route "student/$S1"; sleep 16; shot 26_cloud_student_photo_teacher
+app --es login_kind teacher --es login_pass "$TP" --es viewer_pass "$VP" --es route "circle_report/$C2"; sleep 14; shot 27_cloud_today_report
+# 6) Viewer sees the photo (read-only) + raw read of the photo
+app --es login_kind viewer --es login_pass "$VP" --ez selftest true; sleep 22
+app --es login_kind viewer --es login_pass "$VP" --es route "student/$S1"; sleep 16; shot 28_cloud_student_photo_viewer
+app --es login_kind viewer --es login_pass "$VP" --es route students; sleep 14; shot 29_cloud_viewer_students
+# 7) Admin: writes anywhere; passwords screen
 app --es login_kind admin --es login_pass "$AP" --es viewer_pass "$VP" --ez selftest true --es try_student "$S2:$C2"; sleep 26
-app --es login_kind admin --es login_pass "$AP" --es viewer_pass "$VP" --es route more; sleep 12; shot 25_cloud_admin_panel
-# 7) Wrong password in the teachers box
-echo "teacher box with the admin password: $(fn "{\"action\":\"login\",\"kind\":\"teacher\",\"password\":\"$AP\"}")" | tee -a $LOG
+app --es login_kind admin --es login_pass "$AP" --es viewer_pass "$VP" --es route passwords; sleep 12; shot 30_cloud_admin_passwords
+app --es login_kind admin --es login_pass "$AP" --es viewer_pass "$VP" --es route teachers; sleep 12; shot 31_cloud_admin_teacher_names
+# 8) Admin changes the teachers' password: the old one stops working at once
+app --es login_kind teacher --es login_pass "$TP" --es viewer_pass "$VP" --es route home; sleep 14; shot 32_cloud_teachers_before_change
+echo "set teachers password (admin): $(fn "{\"action\":\"set_password\",\"target\":\"teachers\",\"password\":\"$TP2\"}" "$AT")" | tee -a $LOG
+echo "old teachers password -> HTTP $(fncode "{\"action\":\"login\",\"kind\":\"teacher\",\"password\":\"$TP\"}")" | tee -a $LOG
+echo "new teachers password -> HTTP $(fncode "{\"action\":\"login\",\"kind\":\"teacher\",\"password\":\"$TP2\"}")" | tee -a $LOG
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT; sleep 25; shot 33_cloud_old_session_after_change
+echo "after change, app still in teachers section: $(screen_has 'قسم المعلمين')" | tee -a $LOG
+# 9) Wrong kinds
+echo "teachers box with the admin password: HTTP $(fncode "{\"action\":\"login\",\"kind\":\"teacher\",\"password\":\"$AP\"}")" | tee -a $LOG
+echo "admin box with the teachers password: HTTP $(fncode "{\"action\":\"login\",\"kind\":\"admin\",\"password\":\"$TP2\"}")" | tee -a $LOG
 
 adb logcat -d | grep -E "ALSIDDIQ_SELFTEST|AndroidRuntime" | tee -a $LOG
-# 8) What the server holds now (read as the admin)
-echo "server recitations:" | tee -a $LOG; get "recitations?select=student_id,notes,teacher_id" "$AT" | tee -a $LOG
-echo "server attendance:" | tee -a $LOG; get "attendance?select=student_id,day,status,recorded_by" "$AT" | tee -a $LOG
-echo "server students:" | tee -a $LOG; get "students?select=id,full_name,notes,circle_id" "$AT" | tee -a $LOG
-echo "ids: S1(teacher A)=$S1 S2(teacher B)=$S2 C1=$C1 C2=$C2" | tee -a $LOG
+# 10) What the server holds now (read as the admin)
+echo "server recitations:" | tee -a $LOG; get "recitations?select=student_id,notes,teacher_id,by_name" "$AT" | tee -a $LOG
+echo "server attendance:" | tee -a $LOG; get "attendance?select=student_id,day,status,recorded_by,by_name" "$AT" | tee -a $LOG
+echo "server students:" | tee -a $LOG; get "students?select=id,full_name,notes,circle_id,photo_path" "$AT" | tee -a $LOG
+echo "ids: S1(circle A)=$S1 S2(circle B)=$S2 C1=$C1 C2=$C2" | tee -a $LOG

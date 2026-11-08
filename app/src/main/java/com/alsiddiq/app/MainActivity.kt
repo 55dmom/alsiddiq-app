@@ -21,9 +21,10 @@ class MainActivity : ComponentActivity() {
         val ciViewer = if (BuildConfig.DEBUG) intent?.getStringExtra("viewer_pass") else null
         val ciTry = if (BuildConfig.DEBUG) intent?.getStringExtra("try_student") else null
         val selfTest = BuildConfig.DEBUG && intent?.getBooleanExtra("selftest", false) == true
+        val photoTest = BuildConfig.DEBUG && intent?.getBooleanExtra("photo_test", false) == true
         setContent {
             AlSiddiqTheme {
-                AppRoot(container, autoLogin, startRoute, ciLogin, selfTest, ciViewer, ciTry)
+                AppRoot(container, autoLogin, startRoute, ciLogin, selfTest, ciViewer, ciTry, photoTest)
             }
         }
     }

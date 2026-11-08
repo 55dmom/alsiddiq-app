@@ -141,7 +141,7 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
         item {
             AppCard(padding = 12.dp, onClick = { nav.navigate("student/${s.id}") }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(s.fullName)
+                    StudentAvatar(s)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(s.fullName, style = MaterialTheme.typography.titleSmall)

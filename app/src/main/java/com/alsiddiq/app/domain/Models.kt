@@ -17,8 +17,14 @@ data class Member(
     val phone: String,
     val role: Role,
     val active: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** v3.1: the shared teachers' account — opens every circle. */
+    val allCircles: Boolean = false
 )
+
+/** v3.1: a teacher's NAME (no password). Picked when recording, shown in reports and on circles. */
+@Serializable
+data class TeacherName(val id: String, val name: String, val active: Boolean = true)
 
 @Serializable
 data class Circle(
@@ -29,7 +35,9 @@ data class Circle(
     val schedule: String = "",
     val capacity: Int = 20,
     val active: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** v3.1: the teacher's name (from teacher_names). */
+    val teacherName: String? = null
 )
 
 @Serializable
@@ -46,7 +54,9 @@ data class Student(
     val goalJuz: Int = 30,
     val status: StudentStatus = StudentStatus.ACTIVE,
     val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** v3.1: path of the photo in the private bucket 'student-photos' (null = no photo). */
+    val photoPath: String? = null
 )
 
 @Serializable
@@ -79,7 +89,8 @@ data class Recitation(
     val grade: Grade,
     val mistakes: Int = 0,
     val notes: String = "",
-    val recordedAt: Long = System.currentTimeMillis()
+    val recordedAt: Long = System.currentTimeMillis(),
+    val byName: String? = null
 )
 
 @Serializable
@@ -96,7 +107,8 @@ data class Attendance(
     val day: String,
     val status: AttendanceStatus,
     val recordedBy: String,
-    val recordedAt: Long = System.currentTimeMillis()
+    val recordedAt: Long = System.currentTimeMillis(),
+    val byName: String? = null
 )
 
 @Serializable
@@ -106,7 +118,8 @@ data class Reward(
     val points: Int,
     val reason: String,
     val awardedBy: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val byName: String? = null
 )
 
 @Serializable
@@ -121,7 +134,8 @@ data class Announcement(
     val body: String,
     val audience: Audience,
     val createdBy: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val byName: String? = null
 )
 
 @Serializable
@@ -153,12 +167,20 @@ data class CenterSnapshot(
     val attendance: List<Attendance> = emptyList(),
     val rewards: List<Reward> = emptyList(),
     val announcements: List<Announcement> = emptyList(),
-    val notifications: List<AppNotification> = emptyList()
+    val notifications: List<AppNotification> = emptyList(),
+    val teacherNames: List<TeacherName> = emptyList()
 ) {
     fun member(id: String?): Member? = members.firstOrNull { it.id == id }
     fun circle(id: String?): Circle? = circles.firstOrNull { it.id == id }
     fun student(id: String?): Student? = students.firstOrNull { it.id == id }
     fun studentsIn(circleId: String): List<Student> = students.filter { it.circleId == circleId }
-    fun teachers(): List<Member> = members.filter { it.role == Role.TEACHER && it.active }
+    /** v3.1: teachers are names only (the admin's list). Old per-teacher accounts still count if there are no names. */
+    fun teachers(): List<Member> = members.filter { it.role == Role.TEACHER && it.active && !it.allCircles }
+    fun activeTeacherNames(): List<TeacherName> = teacherNames.filter { it.active }.sortedBy { it.name }
+    fun teacherCount(): Int = activeTeacherNames().size.takeIf { it > 0 } ?: teachers().size
+    /** The teacher shown on a circle: its name, else the old account's name. */
+    fun teacherOf(c: Circle?): String? = c?.teacherName?.takeIf { it.isNotBlank() } ?: member(c?.teacherId)?.takeIf { !it.allCircles }?.fullName
+    /** Who recorded something: the picked name, else the account's name. */
+    fun recorder(byName: String?, accountId: String?): String? = byName?.takeIf { it.isNotBlank() } ?: member(accountId)?.fullName
     fun circlesOf(teacherId: String): List<Circle> = circles.filter { it.teacherId == teacherId }
 }

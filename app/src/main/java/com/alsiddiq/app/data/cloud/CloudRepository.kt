@@ -109,6 +109,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val fresh = try { api.refresh(s.refreshToken) } catch (e: ApiException) {
             if (e.code in 400..499) {
                 // This login ended on the server (its password was changed or the teacher removed).
+                android.util.Log.i("ALSIDDIQ_SELFTEST", "login ended on the server (refresh ${e.code}) -> dropped, back to " + (if (st.baseSession != null && st.baseSession != s) "the general view" else "the password screen"))
                 lock.withLock {
                     st = if (st.baseSession != null && st.baseSession != s)
                         st.copy(session = st.baseSession, me = st.baseMe, baseSession = null, baseMe = null, cache = CenterSnapshot(center = st.cache.center), outbox = emptyList())
@@ -135,7 +136,8 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         id = p["id"]!!.jsonPrimitive.content,
         fullName = p["full_name"]?.jsonPrimitive?.contentOrNull ?: "",
         phone = "",
-        role = when (p["access_kind"]?.jsonPrimitive?.contentOrNull) { "admin" -> Role.ADMIN; "teacher" -> Role.TEACHER; else -> Role.VIEWER }
+        role = when (p["access_kind"]?.jsonPrimitive?.contentOrNull) { "admin" -> Role.ADMIN; "teacher", "teachers" -> Role.TEACHER; else -> Role.VIEWER },
+        allCircles = p["access_kind"]?.jsonPrimitive?.contentOrNull == "teachers" || p["all_circles"]?.jsonPrimitive?.booleanOrNull == true
     )
 
     private suspend fun accessCall(body: JsonObject, token: String? = null): JsonObject =
@@ -165,12 +167,14 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         return st.me ?: me
     }
 
-    override suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String): Result<Member> = runCatching {
-        val a = normPw(adminPassword); val v = normPw(viewerPassword)
-        if (a.length < 6 || v.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
+    override suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String, teachersPassword: String): Result<Member> = runCatching {
+        val a = normPw(adminPassword); val v = normPw(viewerPassword); val t = normPw(teachersPassword)
+        if (a.length < 6 || v.length < 6 || t.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
         if (a == v) throw ValidationError("كلمة سر الإدارة يجب أن تختلف عن كلمة السر العامة")
+        if (t == a || t == v) throw ValidationError("كلمة سر المعلمين يجب أن تختلف عن كلمة سر الإدارة والكلمة العامة")
         val o = accessCall(buildJsonObject {
             put("action", "setup"); put("center_name", centerName.trim()); put("admin_password", a); put("viewer_password", v)
+            put("teachers_password", t)
         })
         adopt(o, keepBase = false)
     }
@@ -225,7 +229,15 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             val rewards = async { api.selectAll(t, "rewards", "select=*&order=created_at.desc") }
             val ann = async { api.selectAll(t, "announcements", "select=*&order=created_at.desc") }
             val notes = async { api.selectAll(t, "notifications", "select=*&user_id=eq.${me.id}&order=created_at.desc") }
-            val members = profiles.await().map { Rows.member(it) }
+            val names = async { runCatching { api.selectAll(t, "teacher_names", "select=*&order=name") }.getOrDefault(emptyList()) }
+            val members = profiles.await().map { Rows.member(it) }.map { if (it.id == me.id) it.copy(allCircles = me.allCircles) else it }
+            if (members.none { it.id == me.id }) {
+                // v3.1: my own profile is unreadable = this login was ended on the server (password changed).
+                // Force a refresh: a 4xx there drops this login (see token()).
+                lock.withLock { st.session?.let { s -> st = st.copy(session = s.copy(expiresAt = 0)) }; save() }
+                token()
+                return@coroutineScope
+            }
             val fresh = CenterSnapshot(
                 center = centers.await().firstOrNull()?.let { Rows.center(it) } ?: CenterInfo(),
                 members = members,
@@ -235,6 +247,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
                 attendance = att.await().map { Rows.attendance(it) },
                 rewards = rewards.await().map { Rows.reward(it) },
                 announcements = ann.await().map { Rows.announcement(it) },
+                teacherNames = names.await().map { Rows.teacherName(it) },
                 notifications = notes.await().map { Rows.notification(it) }
             )
             lock.withLock {
@@ -340,45 +353,64 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         catch (e: OfflineException) { throw ValidationError("هذه العملية تحتاج اتصالاً بالإنترنت") }
     }
 
-    override suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member> = guarded {
+    override suspend fun saveTeacherName(id: String?, name: String): Result<TeacherName> = guarded {
         require(Permissions.canManageMembers(me()))
         if (name.isBlank()) throw ValidationError("اكتب اسم المعلم")
-        val pw = password?.let { normPw(it) }?.takeIf { it.isNotEmpty() }
-        if (id == null && pw == null) throw ValidationError("اختر كلمة سر للمعلم")
-        if (pw != null && pw.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
-        val res = adminFunction(buildJsonObject {
-            put("action", "teacher_save"); put("id", id); put("name", name.trim()); put("circle_id", circleId ?: "")
-            if (pw != null) put("password", pw)
-        })
-        val m = memberFrom(res["profile"]!!.jsonObject)
-        lock.withLock {
-            val d = st.cache
-            st = st.copy(cache = d.copy(
-                members = if (d.members.any { it.id == m.id }) d.members.map { if (it.id == m.id) m else it } else d.members + m,
-                circles = d.circles.map { when { it.id == circleId -> it.copy(teacherId = m.id); it.teacherId == m.id -> it.copy(teacherId = null); else -> it } }
-            )); save(); publish()
+        val saved = TeacherName(id ?: newId(), name.trim(), true)
+        write(PendingOp(type = "upsert", table = "teacher_names",
+            body = buildJsonObject { put("id", saved.id); put("center_id", center()); put("name", saved.name); put("active", true) }.toString()), saved) { d ->
+            d.copy(teacherNames = if (d.teacherNames.any { it.id == saved.id }) d.teacherNames.map { if (it.id == saved.id) saved else it } else d.teacherNames + saved)
         }
-        scope.launch { runCatching { syncNow() } }
-        Result.success(m)
     }
 
-    override suspend fun removeTeacher(id: String): Result<Unit> = guarded {
+    override suspend fun removeTeacherName(id: String): Result<Unit> = guarded {
         require(Permissions.canManageMembers(me()))
-        adminFunction(buildJsonObject { put("action", "teacher_remove"); put("id", id) })
-        lock.withLock {
-            val d = st.cache
-            st = st.copy(cache = d.copy(members = d.members.map { if (it.id == id) it.copy(active = false) else it },
-                circles = d.circles.map { if (it.teacherId == id) it.copy(teacherId = null) else it })); save(); publish()
-        }
-        scope.launch { runCatching { syncNow() } }
+        write(PendingOp(type = "delete", table = "teacher_names", filter = "id=eq.$id"), Unit) { d -> d.copy(teacherNames = d.teacherNames.filterNot { it.id == id }) }
+    }
+
+    // ---------------- v3.1: who is recording (optional name picked on this phone) ----------------
+    private val prefs = context.getSharedPreferences("alsiddiq_prefs", Context.MODE_PRIVATE)
+    private val _recorder = MutableStateFlow(prefs.getString("recorder_name", null))
+    override val recorderName: StateFlow<String?> = _recorder.asStateFlow()
+    override fun setRecorderName(name: String?) {
+        val n = name?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit().putString("recorder_name", n).apply(); _recorder.value = n
+    }
+    private fun byName(): String? = if (st.me?.role == Role.TEACHER) _recorder.value else null
+
+    // ---------------- v3.1: student photos (private bucket) ----------------
+    private val photoDir = File(context.filesDir, "photos").apply { mkdirs() }
+    private fun photoFile(path: String) = File(photoDir, path.replace('/', '_'))
+
+    override suspend fun setStudentPhoto(studentId: String, jpeg: ByteArray?): Result<Unit> = guarded {
+        val u = me(); val d = st.cache
+        val s = d.student(studentId) ?: throw ValidationError("الطالب غير موجود")
+        require(Permissions.canEditStudent(u, s, d))
+        val t = try { token() } catch (e: OfflineException) { throw ValidationError("الصورة تحتاج اتصالاً بالإنترنت") }
+        val old = s.photoPath
+        val path = if (jpeg != null) "${center()}/$studentId/${UUID.randomUUID().toString().take(8)}.jpg" else null
+        try {
+            if (jpeg != null && path != null) { api.uploadObject(t, "student-photos", path, jpeg); photoFile(path).writeBytes(jpeg) }
+            api.patch(t, "students", "id=eq.$studentId", buildJsonObject { put("photo_path", path); put("updated_at", Rows.iso(System.currentTimeMillis())) })
+        } catch (e: OfflineException) { throw ValidationError("الصورة تحتاج اتصالاً بالإنترنت") }
+        if (old != null && old != path) { api.deleteObject(t, "student-photos", old); runCatching { photoFile(old).delete() } }
+        lock.withLock { st = st.copy(cache = st.cache.copy(students = st.cache.students.map { if (it.id == studentId) it.copy(photoPath = path) else it })); save(); publish() }
         Result.success(Unit)
+    }
+
+    override suspend fun studentPhoto(path: String): ByteArray? {
+        val f = photoFile(path)
+        if (f.exists() && f.length() > 0) return runCatching { f.readBytes() }.getOrNull()
+        val bytes = runCatching { api.downloadObject(token(), "student-photos", path) }.getOrNull() ?: return null
+        runCatching { f.writeBytes(bytes) }
+        return bytes
     }
 
     override suspend fun setAccessPassword(target: Role, password: String): Result<Unit> = guarded {
         require(Permissions.canManageMembers(me()))
         val pw = normPw(password)
         if (pw.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
-        adminFunction(buildJsonObject { put("action", "set_password"); put("target", if (target == Role.ADMIN) "admin" else "viewer"); put("password", pw) })
+        adminFunction(buildJsonObject { put("action", "set_password"); put("target", when (target) { Role.ADMIN -> "admin"; Role.TEACHER -> "teachers"; else -> "viewer" }); put("password", pw) })
         Result.success(Unit)
     }
 
@@ -440,7 +472,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         require(Permissions.canRecordFor(u, student, d))
         if (!com.alsiddiq.app.core.Quran.isValid(r.fromSurah, r.fromAyah) || !com.alsiddiq.app.core.Quran.isValid(r.toSurah, r.toAyah)) throw ValidationError("رقم الآية غير صحيح")
         if (com.alsiddiq.app.core.Quran.ayatBetween(r.fromSurah, r.fromAyah, r.toSurah, r.toAyah) <= 0) throw ValidationError("نهاية المقطع قبل بدايته")
-        val saved = r.copy(id = r.id.ifBlank { newId() }, teacherId = u.id, circleId = student.circleId)
+        val saved = r.copy(id = r.id.ifBlank { newId() }, teacherId = u.id, circleId = student.circleId, byName = r.byName ?: byName())
         write(PendingOp(type = "upsert", table = "recitations", ignoreDuplicates = true, body = Rows.recitationRow(saved, center()).toString()), saved) {
             it.copy(recitations = listOf(saved) + it.recitations)
         }
@@ -458,11 +490,12 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
             marks.forEach { (sid, s) -> addJsonObject {
                 put("center_id", center()); put("student_id", sid); put("circle_id", circleId); put("day", day)
                 put("status", s.name.lowercase()); put("recorded_by", u.id); put("recorded_at", Rows.iso(System.currentTimeMillis()))
+                put("by_name", byName())
             } }
         }
         write(PendingOp(type = "upsert", table = "attendance", onConflict = "student_id,day", body = rows.toString()), marks.size) { snap ->
             val kept = snap.attendance.filterNot { it.day == day && it.studentId in marks.keys }
-            snap.copy(attendance = kept + marks.map { (sid, s) -> Attendance(newId(), sid, circleId, day, s, u.id) })
+            snap.copy(attendance = kept + marks.map { (sid, s) -> Attendance(newId(), sid, circleId, day, s, u.id, byName = byName()) })
         }
     }
 
@@ -471,7 +504,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val student = d.student(r.studentId) ?: throw ValidationError("الطالب غير موجود")
         require(Permissions.canRecordFor(u, student, d))
         if (r.points == 0) throw ValidationError("حدّد عدد النقاط")
-        val saved = r.copy(id = r.id.ifBlank { newId() }, awardedBy = u.id)
+        val saved = r.copy(id = r.id.ifBlank { newId() }, awardedBy = u.id, byName = r.byName ?: byName())
         write(PendingOp(type = "upsert", table = "rewards", ignoreDuplicates = true, body = Rows.rewardRow(saved, center()).toString()), saved) {
             it.copy(rewards = listOf(saved) + it.rewards)
         }
@@ -482,7 +515,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val u = me()
         require(Permissions.canPostAnnouncement(u))
         if (a.title.isBlank()) throw ValidationError("اكتب عنوان الإعلان")
-        val saved = a.copy(id = a.id.ifBlank { newId() }, createdBy = u.id)
+        val saved = a.copy(id = a.id.ifBlank { newId() }, createdBy = u.id, byName = a.byName ?: byName())
         write(PendingOp(type = "upsert", table = "announcements", ignoreDuplicates = true, body = Rows.announcementRow(saved, center()).toString()), saved) {
             it.copy(announcements = listOf(saved) + it.announcements)
         }

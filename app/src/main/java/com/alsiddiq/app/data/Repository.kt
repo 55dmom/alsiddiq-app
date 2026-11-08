@@ -38,7 +38,8 @@ interface AuthRepository {
     suspend fun needsSetup(): Boolean? = false
     /** The centre name shown on the password screen (cached). */
     val centerName: StateFlow<String>
-    suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String): Result<Member> =
+    /** v3.1: the setup also creates the ONE shared teachers' password. */
+    suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String, teachersPassword: String): Result<Member> =
         Result.failure(UnsupportedOperationException())
 }
 
@@ -51,12 +52,21 @@ interface CenterRepository {
 
     // Admin: centre, teachers, passwords, circles, students
     suspend fun updateCenter(info: CenterInfo): Result<Unit>
-    /** Create (id = null) or update a teacher: name, their circle, and (optionally) a new password. */
-    suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member>
-    /** The teacher can no longer sign in; their past records keep their name. */
-    suspend fun removeTeacher(id: String): Result<Unit>
-    /** Change the general (VIEWER) or the ADMIN password. */
+    /** v3.1: teacher NAMES only (no passwords). Create (id = null) or rename. */
+    suspend fun saveTeacherName(id: String?, name: String): Result<TeacherName>
+    /** Removes the name from the list; past records keep the name they were saved with. */
+    suspend fun removeTeacherName(id: String): Result<Unit>
+    /** Change the general (VIEWER), the ADMIN, or the shared teachers' (TEACHER) password. */
     suspend fun setAccessPassword(target: Role, password: String): Result<Unit>
+
+    /** v3.1: the teacher's own name picked on this phone (optional); every record then carries it. */
+    val recorderName: StateFlow<String?>
+    fun setRecorderName(name: String?)
+
+    /** v3.1: set (jpeg != null) or remove (null) a student's photo. */
+    suspend fun setStudentPhoto(studentId: String, jpeg: ByteArray?): Result<Unit>
+    /** The photo's bytes (cached on the phone), or null. */
+    suspend fun studentPhoto(path: String): ByteArray?
     suspend fun saveCircle(c: Circle): Result<Circle>
     suspend fun deleteCircle(id: String): Result<Unit>
     suspend fun saveStudent(s: Student): Result<Student>

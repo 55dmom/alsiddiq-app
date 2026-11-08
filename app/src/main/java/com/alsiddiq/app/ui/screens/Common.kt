@@ -129,7 +129,7 @@ fun StudentRow(s: Student, snap: CenterSnapshot, onClick: () -> Unit, trailing: 
     val stats = remember(s, snap.recitations, snap.attendance) { Stats.forStudent(s, snap) }
     AppCard(onClick = onClick, padding = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(s.fullName)
+            StudentAvatar(s)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(s.fullName, style = MaterialTheme.typography.titleSmall)
@@ -169,7 +169,7 @@ fun RecordRow(r: Recitation, snap: CenterSnapshot, showStudent: Boolean, onDelet
                     Stats.describeRange(r) + " • " + Stats.ayatOf(r) + " آية",
                     style = MaterialTheme.typography.bodySmall, color = Brand.Muted
                 )
-                Text(Fmt.relative(r.recordedAt) + (if (r.mistakes > 0) " • ${r.mistakes} أخطاء" else ""), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                Text(Fmt.relative(r.recordedAt) + (if (r.mistakes > 0) " • ${r.mistakes} أخطاء" else "") + (snap.recorder(r.byName, r.teacherId)?.let { " • $it" } ?: ""), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                 if (r.notes.isNotBlank()) Text(r.notes, style = MaterialTheme.typography.bodySmall)
             }
             Column(horizontalAlignment = Alignment.End) {

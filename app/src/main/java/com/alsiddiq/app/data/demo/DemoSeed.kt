@@ -9,8 +9,8 @@ import kotlin.random.Random
 
 /** Sample data for design and testing only. Never used once the central database is connected. */
 object DemoSeed {
-    const val VERSION = 7
-    /** Demo passwords (sample data only): general view, admin, and one per teacher. */
+    const val VERSION = 8
+    /** Demo passwords (sample data only): general view, admin, and the ONE shared teachers' password. */
     const val VIEWER_PASSWORD = "111111"
     const val ADMIN_PASSWORD = "222222"
     const val TEACHER_PASSWORD = "333331"
@@ -24,15 +24,16 @@ object DemoSeed {
 
         val admin = Member("m-admin", "الإدارة", "", Role.ADMIN)
         val viewer = Member("m-viewer", "عرض عام", "", Role.VIEWER)
-        val t1 = Member("m-t1", "الشيخ عبدالله الحربي", "", Role.TEACHER)
-        val t2 = Member("m-t2", "الأستاذ خالد العمري", "", Role.TEACHER)
-        val t3 = Member("m-t3", "الأستاذ ياسر القحطاني", "", Role.TEACHER)
+        // v3.1: one shared teachers' account opens every circle; teachers are names only.
+        val tAcc = Member("m-teachers", "المعلمون", "", Role.TEACHER, allCircles = true)
+        val n1 = "الشيخ عبدالله الحربي"; val n2 = "الأستاذ خالد العمري"; val n3 = "الأستاذ ياسر القحطاني"
+        val teacherNames = listOf(TeacherName("tn1", n1), TeacherName("tn2", n2), TeacherName("tn3", n3))
 
         val circles = listOf(
-            Circle("c1", "حلقة أبي بكر الصديق", t1.id, "متقدم", "بعد العصر • السبت–الأربعاء", 15),
-            Circle("c2", "حلقة عمر بن الخطاب", t2.id, "متوسط", "بعد العصر • السبت–الأربعاء", 15),
-            Circle("c3", "حلقة البراعم", t3.id, "تمهيدي", "بعد المغرب • الأحد–الخميس", 20),
-            Circle("c4", "حلقة الفجر للكبار", t1.id, "مراجعة", "بعد الفجر • يومياً", 12)
+            Circle("c1", "حلقة أبي بكر الصديق", null, "متقدم", "بعد العصر • السبت–الأربعاء", 15, teacherName = n1),
+            Circle("c2", "حلقة عمر بن الخطاب", null, "متوسط", "بعد العصر • السبت–الأربعاء", 15, teacherName = n2),
+            Circle("c3", "حلقة البراعم", null, "تمهيدي", "بعد المغرب • الأحد–الخميس", 20, teacherName = n3),
+            Circle("c4", "حلقة الفجر للكبار", null, "مراجعة", "بعد الفجر • يومياً", 12, teacherName = n1)
         )
         val names = listOf(
             "محمد السالمي", "أحمد الزهراني", "عبدالرحمن الشهري", "يوسف الغامدي", "عمر الدوسري",
@@ -49,7 +50,7 @@ object DemoSeed {
                 goalJuz = if (circle.id == "c3") 3 else if (circle.id == "c4") 30 else 10
             )
         }
-        val members = listOf(admin, viewer, t1, t2, t3)
+        val members = listOf(admin, viewer, tAcc)
 
         val recs = mutableListOf<Recitation>()
         val att = mutableListOf<Attendance>()
@@ -67,18 +68,18 @@ object DemoSeed {
                 att += Attendance("a${seq++}", s.id, circle.id, day.toString(),
                     if (present) (if (rnd.nextInt(10) == 0) AttendanceStatus.LATE else AttendanceStatus.PRESENT)
                     else if (rnd.nextBoolean()) AttendanceStatus.EXCUSED else AttendanceStatus.ABSENT,
-                    circle.teacherId ?: admin.id)
+                    tAcc.id, byName = circle.teacherName)
                 if (!present) continue
                 val at = day.atTime(16 + rnd.nextInt(3), rnd.nextInt(60)).atZone(zone).toInstant().toEpochMilli()
                 val count = (if (circle.id == "c3") 2 else 4) + rnd.nextInt(5)
                 val toAyah = (ayah + count - 1).coerceAtMost(Quran.ayahCount(surah))
                 val grade = Grade.entries[listOf(0, 0, 0, 1, 1, 1, 2, 2, 3, 4)[rnd.nextInt(10)]]
-                recs += Recitation("r${seq++}", s.id, circle.id, circle.teacherId ?: admin.id, RecordKind.HIFZ,
-                    surah, ayah, surah, toAyah, grade, rnd.nextInt(4), "", at)
+                recs += Recitation("r${seq++}", s.id, circle.id, tAcc.id, RecordKind.HIFZ,
+                    surah, ayah, surah, toAyah, grade, rnd.nextInt(4), "", at, byName = circle.teacherName)
                 if (rnd.nextInt(3) == 0) {
                     val ms = surah
-                    recs += Recitation("r${seq++}", s.id, circle.id, circle.teacherId ?: admin.id, RecordKind.MURAJA,
-                        ms, 1, ms, toAyah, Grade.entries[rnd.nextInt(3)], rnd.nextInt(3), "", at + 600_000)
+                    recs += Recitation("r${seq++}", s.id, circle.id, tAcc.id, RecordKind.MURAJA,
+                        ms, 1, ms, toAyah, Grade.entries[rnd.nextInt(3)], rnd.nextInt(3), "", at + 600_000, byName = circle.teacherName)
                 }
                 if (grade != Grade.WEAK) {
                     ayah = toAyah + 1
@@ -88,29 +89,28 @@ object DemoSeed {
                     }
                 }
             }
-            if (idx % 2 == 0) rewards += Reward("w${seq++}", s.id, 10 + rnd.nextInt(4) * 5, "إتقان الحفظ هذا الأسبوع", circle.teacherId ?: admin.id,
-                System.currentTimeMillis() - rnd.nextLong(1, 10) * 86_400_000L)
-            if (idx % 3 == 0) rewards += Reward("w${seq++}", s.id, 5, "الانضباط في الحضور", circle.teacherId ?: admin.id,
-                System.currentTimeMillis() - rnd.nextLong(1, 15) * 86_400_000L)
+            if (idx % 2 == 0) rewards += Reward("w${seq++}", s.id, 10 + rnd.nextInt(4) * 5, "إتقان الحفظ هذا الأسبوع", tAcc.id,
+                System.currentTimeMillis() - rnd.nextLong(1, 10) * 86_400_000L, byName = circle.teacherName)
+            if (idx % 3 == 0) rewards += Reward("w${seq++}", s.id, 5, "الانضباط في الحضور", tAcc.id,
+                System.currentTimeMillis() - rnd.nextLong(1, 15) * 86_400_000L, byName = circle.teacherName)
         }
         val now = System.currentTimeMillis()
         val announcements = listOf(
             Announcement("n1", "مسابقة الحفظ الشهرية", "تبدأ مسابقة المركز الشهرية يوم الخميس القادم بعد العصر، والجوائز للمراكز الثلاثة الأولى في كل حلقة.", Audience.ALL, admin.id, now - 2 * 86_400_000L),
-            Announcement("n2", "تقرير حلقة أبي بكر الصديق — أمس", "الحضور: 4 من 5\nالغائبون: زياد القرني\nالحفظ الجديد: 23 آية\nالمراجعة: 40 آية", Audience.ALL, t1.id, now - 86_400_000L),
+            Announcement("n2", "تقرير حلقة أبي بكر الصديق — أمس", "الحضور: 4 من 5\nالغائبون: زياد القرني\nالحفظ الجديد: 23 آية\nالمراجعة: 40 آية", Audience.ALL, tAcc.id, now - 86_400_000L, byName = n1),
             Announcement("n3", "تحديث خطة المراجعة", "اعتماد مراجعة جزء كامل أسبوعياً لطلاب الحلقات المتقدمة.", Audience.TEACHERS, admin.id, now - 6 * 86_400_000L)
         )
         val notes = listOf(
-            AppNotification("x4", t1.id, "إعلان: تحديث خطة المراجعة", "اعتماد مراجعة جزء كامل أسبوعياً.", "announcement", "n3", true, now - 6 * 86_400_000L),
+            AppNotification("x4", tAcc.id, "إعلان: تحديث خطة المراجعة", "اعتماد مراجعة جزء كامل أسبوعياً.", "announcement", "n3", true, now - 6 * 86_400_000L),
             AppNotification("x5", admin.id, "مرحباً بك في مركز الصديق", "هذه نسخة تجريبية ببيانات نموذجية.", "info", null, false, now)
         )
         val data = CenterSnapshot(
             center = CenterInfo(),
             members = members, circles = circles, students = students,
             recitations = recs, attendance = att, rewards = rewards,
-            announcements = announcements, notifications = notes
+            announcements = announcements, notifications = notes, teacherNames = teacherNames
         )
-        val hashes = mapOf(admin.id to h(ADMIN_PASSWORD), viewer.id to h(VIEWER_PASSWORD),
-            t1.id to h(TEACHER_PASSWORD), t2.id to h("333332"), t3.id to h("333333"))
+        val hashes = mapOf(admin.id to h(ADMIN_PASSWORD), viewer.id to h(VIEWER_PASSWORD), tAcc.id to h(TEACHER_PASSWORD))
         return DemoStore(data, hashes, null, null, VERSION)
     }
 }

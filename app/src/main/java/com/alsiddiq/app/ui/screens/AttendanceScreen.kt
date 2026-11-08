@@ -96,7 +96,7 @@ fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
         items(students, key = { it.id }) { s ->
             AppCard(padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(s.fullName, 36.dp)
+                    StudentAvatar(s, 36.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(s.fullName, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 }

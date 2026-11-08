@@ -110,7 +110,7 @@ object Stats {
         return CenterStats(
             students = students.size,
             circles = snap.circles.count { c -> students.any { it.circleId == c.id } },
-            teachers = snap.teachers().size,
+            teachers = snap.teacherCount(),
             recordsToday = recs.count { dayOf(it.recordedAt) == today },
             attendanceToday = if (attToday.isEmpty()) 0f else presentToday.toFloat() / attToday.size,
             ayatThisWeek = recs.filter { !dayOf(it.recordedAt).isBefore(weekStart) }.sumOf { ayatOf(it) },

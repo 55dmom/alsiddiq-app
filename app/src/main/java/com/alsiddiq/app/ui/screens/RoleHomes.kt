@@ -61,7 +61,7 @@ fun TeacherHome(user: Member, nav: NavHostController) {
     val pending = students.filter { it.id !in logged }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            HomeHeader("السلام عليكم", user.fullName, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
+            HomeHeader("السلام عليكم", LocalContainer.current.center.recorderName.collectAsStateWithLifecycle().value ?: user.fullName, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
@@ -87,11 +87,11 @@ fun TeacherHome(user: Member, nav: NavHostController) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("طلابي", "${students.size}", Icons.Outlined.School, Brand.Navy, Modifier.weight(1f))
+                    StatTile(if (user.allCircles) "الطلاب" else "طلابي", "${students.size}", Icons.Outlined.School, Brand.Navy, Modifier.weight(1f))
                     StatTile("آيات الأسبوع", "${stats.ayatThisWeek}", Icons.Outlined.AutoStories, Brand.Maroon, Modifier.weight(1f))
                     StatTile("حضور اليوم", if (stats.attendanceToday > 0) Fmt.pct(stats.attendanceToday) else "—", Icons.Outlined.FactCheck, Brand.Green, Modifier.weight(1f), onClick = { nav.navigate("attendance") })
                 }
-                SectionHeader("حلقاتي")
+                SectionHeader(if (user.allCircles) "الحلقات" else "حلقاتي")
             }
         }
         items(circles) { c -> Box(Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) { CircleCard(c, snap) { nav.navigate("circle/${c.id}") } } }

@@ -145,3 +145,13 @@ everything incl. `by_name`; admin changed the teachers' password → old passwor
 refused and reads empty, new password works; viewer/teachers calling set_password → 403; duplicate password → 409;
 photos: teachers + admin upload, viewer downloads, viewer upload/delete refused, anon and public URL refused, other-centre
 path refused; rate limit: 429 after 6 wrong. Not verified here: anything in the apps' UI (that is the app builds' job).
+
+### Addendum (same day): circle teacher as a name
+- New nullable `circles.teacher_name text` (migration `0009_v31_circle_teacher_name.sql`, live). The admin's circle editor
+  picks the teacher from `teacher_names` and stores the NAME here (leave `teacher_id` null for new circles). Show
+  `teacher_name ?? profile(teacher_id).full_name ?? "بدون معلم"`. The viewer's "teachers" count = active `teacher_names` rows.
+- Expired login detection: after a password change the old token is not rejected with 401 — reads simply come back empty
+  (the account's own `profiles` row is no longer readable). Android: if the `profiles` read does not contain my own id,
+  force a token refresh; refresh 4xx → drop that login (back to the viewer view / password screen). Do the same on iOS.
+- Teacher-name attribution on Android: the teachers' section has «اسمي» (pick your name from `teacher_names`, remembered on the
+  phone, optional); every recitation/attendance/reward/report row then carries `by_name`.

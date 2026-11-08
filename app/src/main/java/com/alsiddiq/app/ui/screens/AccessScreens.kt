@@ -79,7 +79,7 @@ fun ViewerHome(user: Member, nav: NavHostController) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatTile("الطلاب", "${stats.students}", Icons.Outlined.School, Brand.Navy, Modifier.weight(1f), onClick = { nav.navigate("students") })
                     StatTile("الحلقات", "${snap.circles.size}", Icons.Outlined.Groups, Brand.Maroon, Modifier.weight(1f), onClick = { nav.navigate("circles") })
-                    StatTile("المعلمون", "${snap.teachers().size}", Icons.Outlined.CoPresent, Brand.Gold, Modifier.weight(1f))
+                    StatTile("المعلمون", "${snap.teacherCount()}", Icons.Outlined.CoPresent, Brand.Gold, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -101,7 +101,7 @@ fun ViewerHome(user: Member, nav: NavHostController) {
             Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 AppCard(onClick = { nav.navigate("student/${s.id}") }, padding = 12.dp) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(s.fullName, 38.dp)
+                        StudentAvatar(s, 38.dp)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(s.fullName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -161,7 +161,7 @@ fun ViewerSettingsScreen(user: Member, nav: NavHostController) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 6.dp)) {
                 BigSectionButton("الإدارة", "كلمة سر الإدارة\nتحكم كامل", Icons.Outlined.AdminPanelSettings, Brand.Navy, Brand.NavySoft, Modifier.weight(1f)) { nav.navigate("role_login/ADMIN") }
-                BigSectionButton("المعلمين", "كلمة سر المعلم\nلإدارة حلقته", Icons.Outlined.CoPresent, Brand.Maroon, Brand.MaroonSoft, Modifier.weight(1f)) { nav.navigate("role_login/TEACHER") }
+                BigSectionButton("المعلمين", "كلمة سر المعلمين\nلكل الحلقات", Icons.Outlined.CoPresent, Brand.Maroon, Brand.MaroonSoft, Modifier.weight(1f)) { nav.navigate("role_login/TEACHER") }
             }
         }
         item { SectionHeader("عام") }
@@ -185,7 +185,8 @@ fun RoleStrip(user: Member) {
         verticalAlignment = Alignment.CenterVertically) {
         Icon(if (admin) Icons.Outlined.AdminPanelSettings else Icons.Outlined.CoPresent, null, tint = if (admin) Brand.Navy else Brand.Maroon, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(if (admin) "أنت في قسم الإدارة" else "قسم المعلم: ${user.fullName}", style = MaterialTheme.typography.bodySmall, color = Brand.Ink, modifier = Modifier.weight(1f))
+        val recorder by container.center.recorderName.collectAsStateWithLifecycle()
+        Text(if (admin) "أنت في قسم الإدارة" else "قسم المعلمين" + (recorder?.let { ": $it" } ?: " • كل الحلقات"), style = MaterialTheme.typography.bodySmall, color = Brand.Ink, modifier = Modifier.weight(1f))
         TextButton(onClick = { scope.launch { container.auth.leaveRole() } }) {
             Text(if (base != null) "خروج للعرض العام" else "خروج", color = Brand.Red)
         }
@@ -199,12 +200,13 @@ fun TeacherMoreScreen(user: Member, nav: NavHostController) {
     val mine = Permissions.visibleCircles(user, snap)
     ScreenList("المزيد") {
         item { RoleStrip(user) }
-        item { SectionHeader("تقارير حلقتي") }
-        if (mine.isEmpty()) item { EmptyState("لم تُسند لك حلقة بعد", "تسند الإدارة الحلقة للمعلم من الإعدادات ← الإدارة ← المعلمين") }
-        items(mine) { c -> MenuRow("تقرير ${c.name}", "كم حفظوا اليوم ومن غاب", Icons.Outlined.Summarize, Brand.Maroon) { nav.navigate("circle_report/${c.id}") } }
+        item { RecorderNameRow() }
+        item { SectionHeader("تقرير اليوم") }
+        if (mine.isEmpty()) item { EmptyState("لا توجد حلقات بعد", "تنشئ الإدارة الحلقات من الإعدادات ← الإدارة") }
+        else item { MenuRow("تقرير اليوم", "اختر الحلقة: كم حفظوا اليوم ومن غاب", Icons.Outlined.Summarize, Brand.Maroon) { nav.navigate("circle_report/${mine.first().id}") } }
         item { SectionHeader("أدوات") }
-        item { MenuRow("طالب جديد في حلقتي", "إضافة سجل طالب", Icons.Outlined.PersonAdd) { nav.navigate("student_edit/new" + (mine.firstOrNull()?.let { "?circle=${it.id}" } ?: "")) } }
-        item { MenuRow("التقارير والإحصائيات", "رسوم حلقتي", Icons.Outlined.Insights) { nav.navigate("reports") } }
+        item { MenuRow("طالب جديد", "إضافة سجل طالب في أي حلقة", Icons.Outlined.PersonAdd) { nav.navigate("student_edit/new" + (mine.firstOrNull()?.let { "?circle=${it.id}" } ?: "")) } }
+        item { MenuRow("التقارير والإحصائيات", "رسوم الحلقات", Icons.Outlined.Insights) { nav.navigate("reports") } }
         item { MenuRow("المكافآت", "منح النقاط ولوحة الشرف", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
         item { MenuRow("الإعلانات", "إعلانات المركز", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
@@ -212,107 +214,97 @@ fun TeacherMoreScreen(user: Member, nav: NavHostController) {
     }
 }
 
-/** Admin: the teachers (name, circle, password). */
+/** Admin (v3.1): the teachers' NAMES only. One shared teachers' password (in «كلمات السر») opens every circle;
+ *  a teacher optionally picks his name when recording, so reports show who recorded. */
 @Composable
 fun TeachersScreen(user: Member, nav: NavHostController) {
     val snap = snapshot()
-    val list = snap.members.filter { it.role == Role.TEACHER }.sortedWith(compareBy({ !it.active }, { it.fullName }))
+    val actions = rememberActions()
+    val repo = LocalContainer.current.center
+    val list = snap.activeTeacherNames()
+    var editing by remember { mutableStateOf<TeacherName?>(null) }
+    var askRemove by remember { mutableStateOf<TeacherName?>(null) }
     ScreenList("المعلمون", onBack = { nav.popBackStack() }, fab = {
-        if (Permissions.canManageMembers(user)) AddFab("معلم جديد") { nav.navigate("teacher_edit/new") }
+        if (Permissions.canManageMembers(user)) AddFab("اسم معلم") { editing = TeacherName("", "") }
     }) {
-        item { Text("لكل معلم كلمة سر خاصة تفتح حلقته فقط. يدخل بها من الإعدادات ← المعلمين.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted) }
-        if (list.isEmpty()) item { EmptyState("لا يوجد معلمون بعد", "أضف أول معلم واختر حلقته وكلمة سره") }
-        items(list, key = { it.id }) { m ->
-            val circles = snap.circlesOf(m.id)
-            AppCard(onClick = { nav.navigate("teacher_edit/${m.id}") }, padding = 12.dp) {
+        item {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Brand.GoldSoft).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Key, null, tint = Brand.Gold, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("كل المعلمين يدخلون بكلمة سر واحدة تفتح كل الحلقات (تغييرها من «كلمات السر»). هذه الأسماء فقط ليختار المعلم اسمه عند التسجيل، فتظهر في التقارير.",
+                    style = MaterialTheme.typography.bodySmall, color = Brand.Ink, modifier = Modifier.weight(1f))
+            }
+        }
+        item { MenuRow("كلمة سر المعلمين", "تغيير كلمة السر المشتركة", Icons.Outlined.Password, Brand.Maroon) { nav.navigate("passwords") } }
+        if (list.isEmpty()) item { EmptyState("لا توجد أسماء بعد", "أضف أسماء المعلمين (اختياري)") }
+        items(list, key = { it.id }) { t ->
+            AppCard(onClick = { editing = t }, padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(m.fullName, color = Brand.Maroon)
+                    Avatar(t.name, color = Brand.Maroon)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(m.fullName, style = MaterialTheme.typography.titleSmall)
-                        Text(circles.joinToString("، ") { "${it.name} (${snap.studentsIn(it.id).size} طالب)" }.ifBlank { "بدون حلقة" },
-                            style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(t.name, style = MaterialTheme.typography.titleSmall)
+                        val cs = snap.circles.filter { it.teacherName == t.name }
+                        Text(cs.joinToString("، ") { it.name }.ifBlank { "—" }, style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (!m.active) Pill("محذوف", Brand.Red)
+                    if (Permissions.canManageMembers(user)) IconButton(onClick = { askRemove = t }) { Icon(Icons.Outlined.DeleteOutline, "حذف", tint = Brand.Muted) }
                 }
             }
         }
     }
-}
-
-@Composable
-fun TeacherEditScreen(user: Member, nav: NavHostController, id: String) {
-    val snap = snapshot()
-    val actions = rememberActions()
-    val repo = LocalContainer.current.center
-    val existing = snap.member(id)?.takeIf { it.role == Role.TEACHER }
-    var name by remember { mutableStateOf(existing?.fullName ?: "") }
-    var circleId by remember { mutableStateOf(existing?.let { snap.circlesOf(it.id).firstOrNull()?.id }) }
-    var pass by remember { mutableStateOf("") }
-    var pass2 by remember { mutableStateOf("") }
-    var pick by remember { mutableStateOf(false) }
-    var askRemove by remember { mutableStateOf(false) }
-    ScreenList(if (existing == null) "معلم جديد" else "تعديل المعلم", onBack = { nav.popBackStack() }) {
-        item {
-            AppCard {
-                Field(name, { name = it }, "اسم المعلم")
-                Spacer(Modifier.height(10.dp))
-                SelectorField("الحلقة", snap.circle(circleId)?.let { "${it.name} (${snap.studentsIn(it.id).size} طالب)" } ?: "اختر الحلقة") { pick = true }
-                Spacer(Modifier.height(12.dp))
-                Text(if (existing == null) "كلمة سر المعلم" else "كلمة سر جديدة (اتركها فارغة لإبقاء الحالية)", style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.height(6.dp))
-                com.alsiddiq.app.ui.auth.PasswordField(pass, { pass = it }, "كلمة السر (6 على الأقل)")
-                Spacer(Modifier.height(8.dp))
-                com.alsiddiq.app.ui.auth.PasswordField(pass2, { pass2 = it }, "تأكيد كلمة السر")
-                if (pass2.isNotEmpty() && pass != pass2) Text("غير متطابقتين", color = Brand.Red, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(6.dp))
-                Text("تُحفظ مشفّرة على الخادم. لا يمكن عرضها لاحقاً، فقط تغييرها.", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
-            }
-        }
-        item {
-            Button(
-                enabled = Permissions.canManageMembers(user) && name.isNotBlank() && pass == pass2 && (existing != null || pass.isNotEmpty()),
-                onClick = {
-                    actions.run(if (existing == null) "تمت إضافة المعلم" else "تم حفظ التعديلات", {
-                        repo.saveTeacher(existing?.id, name, circleId, pass.ifBlank { null })
-                    }) { nav.popBackStack() }
-                },
-                modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
-            ) { Text(if (existing == null) "إضافة المعلم" else "حفظ") }
-            if (existing != null && existing.active) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { askRemove = true }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand.Red)) { Text("حذف المعلم (تبقى سجلاته)") }
-            }
-        }
+    editing?.let { t ->
+        var name by remember(t) { mutableStateOf(t.name) }
+        AlertDialog(onDismissRequest = { editing = null },
+            title = { Text(if (t.id.isEmpty()) "اسم معلم جديد" else "تعديل الاسم") },
+            text = { Field(name, { name = it }, "اسم المعلم") },
+            confirmButton = { Button(enabled = name.isNotBlank(), onClick = {
+                actions.run("تم الحفظ", { repo.saveTeacherName(t.id.ifEmpty { null }, name) }) { editing = null }
+            }) { Text("حفظ") } },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("إلغاء") } })
     }
-    if (pick) PickerDialog("اختر الحلقة", snap.circles.sortedBy { it.name }, { c -> c.name + (snap.member(c.teacherId)?.takeIf { it.id != existing?.id }?.let { " — مع ${it.fullName}" } ?: "") },
-        { circleId = it.id }, { pick = false })
-    if (askRemove && existing != null) ConfirmDialog("حذف ${existing.fullName}؟", "لن يستطيع الدخول بكلمة سره بعد الآن، وتبقى حلقته بدون معلم. سجلاته السابقة تبقى.", "حذف",
-        { actions.run("تم حذف المعلم", { repo.removeTeacher(existing.id) }) { nav.popBackStack() } }, { askRemove = false }, destructive = true)
+    askRemove?.let { t ->
+        ConfirmDialog("حذف ${t.name}؟", "يُحذف من القائمة فقط، وتبقى سجلاته السابقة باسمه.", "حذف",
+            { actions.run("تم الحذف", { repo.removeTeacherName(t.id) }) { askRemove = null } }, { askRemove = null }, destructive = true)
+    }
 }
 
-/** Admin: the general password and the admin password. */
+/** Old route kept so links don't break: opens the names list. */
+@Composable
+fun TeacherEditScreen(user: Member, nav: NavHostController, id: String) = TeachersScreen(user, nav)
+
+/** Teacher (v3.1): "who am I" — the teacher picks his name from the admin's list (optional, remembered on this phone). */
+@Composable
+fun RecorderNameRow() {
+    val repo = LocalContainer.current.center
+    val snap = snapshot()
+    val me by repo.recorderName.collectAsStateWithLifecycle()
+    var pick by remember { mutableStateOf(false) }
+    MenuRow("اسمي", me ?: "اختر اسمك ليظهر في التقارير (اختياري)", Icons.Outlined.Badge, Brand.Maroon) { pick = true }
+    if (pick) PickerDialog("من أنت؟", listOf(TeacherName("", "بدون اسم")) + snap.activeTeacherNames(), { it.name },
+        { repo.setRecorderName(it.name.takeIf { _ -> it.id.isNotEmpty() }) }, { pick = false })
+}
+
+/** Admin: the general password, the admin password, and the ONE shared teachers' password. */
 @Composable
 fun PasswordsScreen(user: Member, nav: NavHostController) {
     val actions = rememberActions()
     val repo = LocalContainer.current.center
     var editing by remember { mutableStateOf<Role?>(null) }
     ScreenList("كلمات السر", onBack = { nav.popBackStack() }) {
-        item { Text("كلمات السر محفوظة مشفّرة على الخادم ولا يمكن عرضها، فقط تغييرها. عند تغيير أي كلمة سر يخرج كل من كان داخلاً بها.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted) }
-        item { MenuRow("كلمة السر العامة", "للعرض فقط: الطلاب والنتائج والتقارير", Icons.Outlined.Visibility, Brand.Maroon) { editing = Role.VIEWER } }
+        item { Text("كلمات السر محفوظة مشفّرة على الخادم ولا يمكن عرضها، فقط تغييرها. عند تغيير أي كلمة سر يخرج كل من كان داخلاً بها فوراً.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted) }
+        item { MenuRow("كلمة السر العامة", "للعرض فقط: الطلاب والنتائج والتقارير", Icons.Outlined.Visibility, Brand.Gold) { editing = Role.VIEWER } }
+        item { MenuRow("كلمة سر المعلمين", "واحدة لكل المعلمين: تفتح كل الحلقات وتعدّل كل الطلاب", Icons.Outlined.CoPresent, Brand.Maroon) { editing = Role.TEACHER } }
         item { MenuRow("كلمة سر الإدارة", "تحكم كامل في التطبيق", Icons.Outlined.AdminPanelSettings) { editing = Role.ADMIN } }
-        item { MenuRow("كلمات سر المعلمين", "من صفحة كل معلم", Icons.Outlined.CoPresent) { nav.navigate("teachers") } }
     }
     editing?.let { target ->
         var p1 by remember(target) { mutableStateOf("") }
         var p2 by remember(target) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { editing = null },
-            title = { Text(if (target == Role.ADMIN) "كلمة سر الإدارة الجديدة" else "كلمة السر العامة الجديدة") },
+            title = { Text(when (target) { Role.ADMIN -> "كلمة سر الإدارة الجديدة"; Role.TEACHER -> "كلمة سر المعلمين الجديدة"; else -> "كلمة السر العامة الجديدة" }) },
             text = {
                 Column {
-                    com.alsiddiq.app.ui.auth.PasswordField(p1, { p1 = it }, "كلمة السر الجديدة")
+                    com.alsiddiq.app.ui.auth.PasswordField(p1, { p1 = it }, "كلمة السر الجديدة (6 على الأقل)")
                     Spacer(Modifier.height(8.dp))
                     com.alsiddiq.app.ui.auth.PasswordField(p2, { p2 = it }, "تأكيد كلمة السر")
                     if (p2.isNotEmpty() && p1 != p2) Text("غير متطابقتين", color = Brand.Red, style = MaterialTheme.typography.bodySmall)
@@ -330,17 +322,21 @@ fun PasswordsScreen(user: Member, nav: NavHostController) {
 
 /** Teacher (or admin): today's circle report — how much was memorised and who was absent. Publish it for everyone, or share it. */
 @Composable
-fun CircleReportScreen(user: Member, nav: NavHostController, circleId: String) {
+fun CircleReportScreen(user: Member, nav: NavHostController, initialCircleId: String) {
     val snap = snapshot()
     val actions = rememberActions()
     val repo = LocalContainer.current.center
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    var circleId by remember { mutableStateOf(initialCircleId) }
     val circle = snap.circle(circleId)
+    var pickCircle by remember { mutableStateOf(false) }
+    val choices = Permissions.visibleCircles(user, snap)
     var day by remember { mutableStateOf(LocalDate.now()) }
     val text = remember(snap, day, circleId) { circleReportText(snap, circleId, day) }
     var body by remember(text) { mutableStateOf(text) }
     val canPost = Permissions.canPostAnnouncement(user) && (user.role == Role.ADMIN || Permissions.teachesCircle(user, circle))
-    ScreenList("تقرير ${circle?.name ?: "الحلقة"}", onBack = { nav.popBackStack() }) {
+    ScreenList("تقرير اليوم", onBack = { nav.popBackStack() }) {
+        item { SelectorField("الحلقة", circle?.let { "${it.name} (${snap.studentsIn(it.id).size} طالب)" } ?: "اختر الحلقة") { pickCircle = true } }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(0L to "اليوم", 1L to "أمس").forEach { (back, label) ->
@@ -369,6 +365,7 @@ fun CircleReportScreen(user: Member, nav: NavHostController, circleId: String) {
             }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp)) { Text("مشاركة (واتساب وغيره)") }
         }
     }
+    if (pickCircle) PickerDialog("اختر الحلقة", choices, { "${it.name} (${snap.studentsIn(it.id).size} طالب)" }, { circleId = it.id }, { pickCircle = false })
 }
 
 fun circleReportText(snap: CenterSnapshot, circleId: String, day: LocalDate): String {
@@ -381,6 +378,8 @@ fun circleReportText(snap: CenterSnapshot, circleId: String, day: LocalDate): St
     val absent = students.filter { att[it.id]?.status == AttendanceStatus.ABSENT }
     val excused = students.filter { att[it.id]?.status == AttendanceStatus.EXCUSED }
     val sb = StringBuilder()
+    val by = (recs.mapNotNull { it.byName } + att.values.mapNotNull { it.byName }).distinct()
+    if (by.isNotEmpty()) sb.append("المعلم: ${by.joinToString("، ")}\n")
     sb.append("عدد الطلاب: ${students.size}\n")
     if (att.isEmpty()) sb.append("الحضور: لم يُسجَّل بعد\n") else sb.append("الحضور: $present من ${students.size}\n")
     sb.append("الغائبون: ").append(absent.joinToString("، ") { it.fullName }.ifBlank { "لا أحد" }).append("\n")

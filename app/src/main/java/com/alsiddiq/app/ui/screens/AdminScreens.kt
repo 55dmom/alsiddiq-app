@@ -165,7 +165,7 @@ fun CircleCard(c: Circle, snap: CenterSnapshot, onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(c.name, style = MaterialTheme.typography.titleSmall)
-                Text(snap.member(c.teacherId)?.fullName ?: "بدون معلم", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                Text(snap.teacherOf(c) ?: "بدون معلم", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                 if (c.schedule.isNotBlank()) Text(c.schedule, style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -190,7 +190,7 @@ fun MoreScreen(user: Member, nav: NavHostController) {
     ScreenList("الإدارة") {
         item { RoleStrip(user) }
         item { SectionHeader("المعلمون وكلمات السر") }
-        item { MenuRow("المعلمون", "${snap.teachers().size} معلم • الاسم والحلقة وكلمة السر", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teachers") } }
+        item { MenuRow("المعلمون", "${snap.activeTeacherNames().size} اسم • لمعرفة من سجّل", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teachers") } }
         item { MenuRow("كلمات السر", "العامة والإدارة", Icons.Outlined.Password) { nav.navigate("passwords") } }
         item { SectionHeader("المتابعة") }
         item { MenuRow("الحضور والغياب", "تسجيل ومراجعة الحضور", Icons.Outlined.FactCheck) { nav.navigate("attendance") } }

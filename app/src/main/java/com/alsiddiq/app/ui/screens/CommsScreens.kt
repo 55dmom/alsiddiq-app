@@ -68,7 +68,7 @@ fun AnnouncementsScreen(user: Member, nav: NavHostController) {
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(a.title, style = MaterialTheme.typography.titleSmall)
-                        Text("${snap.member(a.createdBy)?.fullName ?: "الإدارة"} • ${Fmt.relative(a.createdAt)}", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                        Text("${snap.recorder(a.byName, a.createdBy) ?: "الإدارة"} • ${Fmt.relative(a.createdAt)}", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                     }
                     Pill(a.audience.label, Brand.Navy)
                 }

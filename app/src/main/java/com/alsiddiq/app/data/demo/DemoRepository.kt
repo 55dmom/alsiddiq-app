@@ -33,7 +33,7 @@ data class DemoStore(
  * file on the device and applies the same permission rules the server will enforce,
  * so screens behave exactly as they will with the real backend. It does NOT sync.
  */
-class DemoRepository(context: Context) : AuthRepository, CenterRepository {
+class DemoRepository(private val context: Context) : AuthRepository, CenterRepository {
     private val file = File(context.filesDir, "demo_store.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -85,7 +85,8 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
             attendance = all.attendance.filter { it.studentId in ids },
             rewards = all.rewards.filter { it.studentId in ids },
             announcements = all.announcements.filter { Permissions.audienceIncludes(it.audience, user.role) },
-            notifications = all.notifications.filter { it.userId == user.id }
+            notifications = all.notifications.filter { it.userId == user.id },
+            teacherNames = all.teacherNames
         )
     }
 
@@ -156,33 +157,37 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
         require(Permissions.canManageCenter(u)); d.copy(center = info) to Unit
     }
 
-    override suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member> = lock.withLock {
-        val u = _user.value ?: return Result.failure(PermissionDenied())
-        if (!Permissions.canManageMembers(u)) return Result.failure(PermissionDenied())
-        if (name.isBlank()) return Result.failure(ValidationError("اكتب اسم المعلم"))
-        val pw = password?.let { normPw(it) }?.takeIf { it.isNotEmpty() }
-        if (id == null && pw == null) return Result.failure(ValidationError("اختر كلمة سر للمعلم"))
-        if (pw != null && pw.length < 6) return Result.failure(ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل"))
-        if (pw != null && store.passwordHashes.any { (mid, ph) -> mid != id && ph == hash(pw) }) return Result.failure(ValidationError("كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها"))
-        val d = store.data
-        val m = d.member(id)?.copy(fullName = name.trim(), active = true) ?: Member(newId(), name.trim(), "", Role.TEACHER)
-        store = store.copy(
-            data = d.copy(
-                members = if (d.members.any { it.id == m.id }) d.members.map { if (it.id == m.id) m else it } else d.members + m,
-                circles = d.circles.map { when { it.id == circleId -> it.copy(teacherId = m.id); it.teacherId == m.id -> it.copy(teacherId = null); else -> it } }
-            ),
-            passwordHashes = if (pw != null) store.passwordHashes + (m.id to hash(pw)) else store.passwordHashes
-        )
-        persist()
-        _snapshot.value = visibleTo(u)
-        Result.success(m)
+    override suspend fun saveTeacherName(id: String?, name: String) = mutate { d, u ->
+        require(Permissions.canManageMembers(u))
+        if (name.isBlank()) throw ValidationError("اكتب اسم المعلم")
+        val saved = TeacherName(id ?: newId(), name.trim())
+        d.copy(teacherNames = if (d.teacherNames.any { it.id == saved.id }) d.teacherNames.map { if (it.id == saved.id) saved else it } else d.teacherNames + saved) to saved
     }
 
-    override suspend fun removeTeacher(id: String) = mutate { d, u ->
+    override suspend fun removeTeacherName(id: String) = mutate { d, u ->
         require(Permissions.canManageMembers(u))
-        d.copy(members = d.members.map { if (it.id == id) it.copy(active = false) else it },
-            circles = d.circles.map { if (it.teacherId == id) it.copy(teacherId = null) else it }) to Unit
+        d.copy(teacherNames = d.teacherNames.filterNot { it.id == id }) to Unit
     }
+
+    private val prefs = context.getSharedPreferences("alsiddiq_demo_prefs", Context.MODE_PRIVATE)
+    private val _recorder = MutableStateFlow(prefs.getString("recorder_name", null))
+    override val recorderName: StateFlow<String?> = _recorder.asStateFlow()
+    override fun setRecorderName(name: String?) {
+        val n = name?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit().putString("recorder_name", n).apply(); _recorder.value = n
+    }
+    private fun byName(u: Member): String? = if (u.role == Role.TEACHER) _recorder.value else null
+
+    private val photoDir = File(context.filesDir, "demo_photos").apply { mkdirs() }
+    override suspend fun setStudentPhoto(studentId: String, jpeg: ByteArray?) = mutate { d, u ->
+        val s = d.student(studentId) ?: throw ValidationError("الطالب غير موجود")
+        require(Permissions.canEditStudent(u, s, d))
+        s.photoPath?.let { runCatching { File(photoDir, it.replace('/', '_')).delete() } }
+        val path = jpeg?.let { "demo/$studentId/${newId().take(8)}.jpg" }
+        if (jpeg != null && path != null) File(photoDir, path.replace('/', '_')).writeBytes(jpeg)
+        d.copy(students = d.students.map { if (it.id == studentId) it.copy(photoPath = path) else it }) to Unit
+    }
+    override suspend fun studentPhoto(path: String): ByteArray? = runCatching { File(photoDir, path.replace('/', '_')).readBytes() }.getOrNull()
 
     override suspend fun setAccessPassword(target: Role, password: String): Result<Unit> = lock.withLock {
         val u = _user.value ?: return Result.failure(PermissionDenied())
@@ -237,7 +242,7 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
         require(Permissions.canRecordFor(u, student, d))
         if (!Quran.isValid(r.fromSurah, r.fromAyah) || !Quran.isValid(r.toSurah, r.toAyah)) throw ValidationError("رقم الآية غير صحيح")
         if (Quran.ayatBetween(r.fromSurah, r.fromAyah, r.toSurah, r.toAyah) <= 0) throw ValidationError("نهاية المقطع قبل بدايته")
-        val saved = r.copy(id = r.id.ifBlank { newId() }, teacherId = u.id, circleId = student.circleId)
+        val saved = r.copy(id = r.id.ifBlank { newId() }, teacherId = u.id, circleId = student.circleId, byName = r.byName ?: byName(u))
         val ayat = Quran.ayatBetween(r.fromSurah, r.fromAyah, r.toSurah, r.toAyah)
         val title = "${saved.kind.label}: ${student.fullName}"
         val body = "${com.alsiddiq.app.domain.Stats.describeRange(saved)} • $ayat آية • ${saved.grade.label}"
@@ -256,7 +261,7 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
         val circle = d.circle(circleId) ?: throw ValidationError("الحلقة غير موجودة")
         require(u.role == Role.ADMIN || Permissions.teachesCircle(u, circle))
         val kept = d.attendance.filterNot { it.day == day && it.studentId in marks.keys }
-        val added = marks.map { (sid, st) -> Attendance(newId(), sid, circleId, day, st, u.id) }
+        val added = marks.map { (sid, st) -> Attendance(newId(), sid, circleId, day, st, u.id, byName = byName(u)) }
         val notes = marks.filter { it.value == AttendanceStatus.ABSENT }.flatMap { (sid, _) ->
             val s = d.student(sid)
             notify(d, recipientsFor(d, sid), "غياب ${s?.fullName ?: ""}", "سُجّل غياب في ${circle.name} بتاريخ $day", "absence", sid)
@@ -268,7 +273,7 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
         val student = d.student(r.studentId) ?: throw ValidationError("الطالب غير موجود")
         require(Permissions.canRecordFor(u, student, d))
         if (r.points == 0) throw ValidationError("حدّد عدد النقاط")
-        val saved = r.copy(id = r.id.ifBlank { newId() }, awardedBy = u.id)
+        val saved = r.copy(id = r.id.ifBlank { newId() }, awardedBy = u.id, byName = r.byName ?: byName(u))
         val notes = notify(d, recipientsFor(d, student.id), "مكافأة ${student.fullName} 🎉", "+${r.points} نقطة: ${r.reason}", "reward", saved.id)
         d.copy(rewards = d.rewards + saved, notifications = d.notifications + notes) to saved
     }
@@ -277,7 +282,7 @@ class DemoRepository(context: Context) : AuthRepository, CenterRepository {
     override suspend fun postAnnouncement(a: Announcement) = mutate { d, u ->
         require(Permissions.canPostAnnouncement(u))
         if (a.title.isBlank()) throw ValidationError("اكتب عنوان الإعلان")
-        val saved = a.copy(id = a.id.ifBlank { newId() }, createdBy = u.id)
+        val saved = a.copy(id = a.id.ifBlank { newId() }, createdBy = u.id, byName = a.byName ?: byName(u))
         val targets = d.members.filter { it.id != u.id && Permissions.audienceIncludes(a.audience, it.role) }.map { it.id }
         val notes = notify(d, targets, "إعلان: ${a.title}", a.body.take(120), "announcement", saved.id)
         d.copy(announcements = d.announcements + saved, notifications = d.notifications + notes) to saved

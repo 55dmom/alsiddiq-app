@@ -128,6 +128,26 @@ class SupabaseApi(private val baseUrl: String, private val publicKey: String) {
     suspend fun rawPatch(token: String, table: String, filter: String, row: JsonObject): Pair<Int, String> =
         exec("PATCH", "/rest/v1/$table?$filter", token, row, mapOf("Prefer" to "return=representation"))
 
+    // ---------- Storage (private bucket; always with the user's token) ----------
+    suspend fun uploadObject(token: String, bucket: String, path: String, bytes: ByteArray, contentType: String = "image/jpeg") = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(baseUrl.trimEnd('/') + "/storage/v1/object/$bucket/$path")
+            .header("apikey", publicKey).header("Authorization", "Bearer $token").header("x-upsert", "true")
+            .post(bytes.toRequestBody(contentType.toMediaType())).build()
+        val (code, text) = try { http.newCall(req).execute().use { r -> r.code to (r.body?.string() ?: "") } } catch (e: IOException) { throw OfflineException() }
+        if (code !in 200..299) throw ApiException(if (text.contains("\"403\"")) 403 else code, errorText(if (text.contains("\"403\"")) 403 else code, text))
+    }
+
+    /** The object's bytes, or null when it doesn't exist / isn't readable. */
+    suspend fun downloadObject(token: String, bucket: String, path: String): ByteArray? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(baseUrl.trimEnd('/') + "/storage/v1/object/authenticated/$bucket/$path")
+            .header("apikey", publicKey).header("Authorization", "Bearer $token").get().build()
+        try { http.newCall(req).execute().use { r -> if (r.isSuccessful) r.body?.bytes() else null } } catch (e: IOException) { throw OfflineException() }
+    }
+
+    suspend fun deleteObject(token: String, bucket: String, path: String) {
+        runCatching { exec("DELETE", "/storage/v1/object/$bucket/$path", token) }
+    }
+
     suspend fun function(token: String?, name: String, body: JsonObject): JsonObject {
         val text = ok("POST", "/functions/v1/$name", token, body)
         return runCatching { json.parseToJsonElement(text).jsonObject }.getOrDefault(JsonObject(emptyMap()))

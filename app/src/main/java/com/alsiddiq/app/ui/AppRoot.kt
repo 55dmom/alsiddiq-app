@@ -55,7 +55,7 @@ fun tabsFor(role: Role): List<TabItem> = when (role) {
     )
     Role.TEACHER -> listOf(
         TabItem("home", "الرئيسية", Icons.Outlined.Home, Icons.Filled.Home),
-        TabItem("circles", "حلقتي", Icons.Outlined.Groups, Icons.Filled.Groups),
+        TabItem("circles", "الحلقات", Icons.Outlined.Groups, Icons.Filled.Groups),
         TabItem("record_start", "تسجيل", Icons.Outlined.AddCircleOutline, Icons.Filled.AddCircle),
         TabItem("attendance", "الحضور", Icons.Outlined.FactCheck, Icons.Filled.FactCheck),
         TabItem("teacher_more", "المزيد", Icons.Outlined.GridView, Icons.Filled.GridView)
@@ -63,7 +63,7 @@ fun tabsFor(role: Role): List<TabItem> = when (role) {
 }
 
 @Composable
-fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ciLogin: Pair<String, String>? = null, selfTest: Boolean = false, ciViewerPass: String? = null, ciTry: String? = null) {
+fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ciLogin: Pair<String, String>? = null, selfTest: Boolean = false, ciViewerPass: String? = null, ciTry: String? = null, photoTest: Boolean = false) {
     val user by container.auth.currentUser.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var splash by remember { mutableStateOf(autoLogin == null && ciLogin == null) }
@@ -106,7 +106,7 @@ fun AppRoot(container: AppContainer, autoLogin: String?, startRoute: String?, ci
                 state == "login" -> Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0), snackbarHost = { SnackbarHost(snackbar) }) { pad ->
                     Box(Modifier.padding(pad)) { LoginScreen() }
                 }
-                else -> user?.let { MainShell(it, snackbar, if (autoLogin != null || ciLogin != null) startRoute else null, selfTest && ciDone, ciTry) }
+                else -> user?.let { MainShell(it, snackbar, if (autoLogin != null || ciLogin != null) startRoute else null, selfTest && ciDone, ciTry, photoTest) }
             }
         }
     }
@@ -137,7 +137,7 @@ private fun Splash() {
 }
 
 @Composable
-private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: String?, selfTest: Boolean = false, ciTry: String? = null) {
+private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: String?, selfTest: Boolean = false, ciTry: String? = null, photoTest: Boolean = false) {
     val nav = rememberNavController()
     val tabs = remember(user.role) { tabsFor(user.role) }
     val entry by nav.currentBackStackEntryAsState()
@@ -159,7 +159,7 @@ private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: Str
     // Fresh data from the central database as soon as the main screen opens.
     LaunchedEffect(user.id) { runCatching { container.center.refresh() } }
     // Debug-only end-to-end check used by CI against the real database.
-    if (selfTest) LaunchedEffect(user.id) { com.alsiddiq.app.ui.SelfTest.run(container, user, ciTry) }
+    if (selfTest) LaunchedEffect(user.id) { com.alsiddiq.app.ui.SelfTest.run(container, user, ciTry, photoTest) }
     // Android 13+: ask once for permission to show notifications (absence, new hifz, announcements).
     if (container.cloudConfigured && android.os.Build.VERSION.SDK_INT >= 33) {
         val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
