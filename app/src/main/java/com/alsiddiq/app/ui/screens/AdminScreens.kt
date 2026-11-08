@@ -170,8 +170,8 @@ fun CircleCard(c: Circle, snap: CenterSnapshot, onClick: () -> Unit) {
                 if (c.schedule.isNotBlank()) Text(c.schedule, style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Pill("${students.size} طالب", Brand.Navy)
-                if (c.level.isNotBlank()) { Spacer(Modifier.height(4.dp)); Pill(c.level, Brand.Maroon) }
+                Pill(ArabicText.students(students.size), Brand.Navy)
+                if (c.level.isNotBlank()) { Spacer(Modifier.height(4.dp)); Pill(ArabicText.level(c.level), Brand.Maroon) }
             }
         }
         if (att.isNotEmpty()) {

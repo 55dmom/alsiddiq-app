@@ -93,7 +93,7 @@ fun CircleDetailScreen(user: Member, nav: NavHostController, id: String) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(snap.teacherOf(circle) ?: "بدون معلم", style = MaterialTheme.typography.titleSmall)
-                        Text(listOf(circle.level, circle.schedule).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                        Text(listOf(ArabicText.level(circle.level), circle.schedule).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -155,12 +155,12 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
     var name by remember { mutableStateOf(existing?.name ?: "") }
     var teacherName by remember { mutableStateOf(snap.teacherOf(existing)) }
     var teacherId by remember { mutableStateOf(existing?.teacherId) }
-    var level by remember { mutableStateOf(existing?.level ?: "") }
+    var level by remember { mutableStateOf(ArabicText.level(existing?.level ?: "")) }
     var schedule by remember { mutableStateOf(existing?.schedule ?: "") }
     var capacity by remember { mutableStateOf((existing?.capacity ?: 15).toString()) }
     var pickTeacher by remember { mutableStateOf(false) }
     var askDelete by remember { mutableStateOf(false) }
-    val levels = listOf("تمهيدي", "متوسط", "متقدم", "مراجعة", "إجازة")
+    val levels = ArabicText.LEVELS   // «تمهيدي» is now «مبتدئ» (his fix)
 
     ScreenList(if (existing == null) "حلقة جديدة" else "تعديل الحلقة", onBack = { nav.popBackStack() }) {
         item {

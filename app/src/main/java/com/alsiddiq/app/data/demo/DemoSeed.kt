@@ -33,7 +33,7 @@ object DemoSeed {
         val circles = listOf(
             Circle("c1", "حلقة أبي بكر الصديق", t1.id, "متقدم", "بعد العصر • السبت–الأربعاء", 15, teacherName = n1),
             Circle("c2", "حلقة عمر بن الخطاب", t2.id, "متوسط", "بعد العصر • السبت–الأربعاء", 15, teacherName = n2),
-            Circle("c3", "حلقة البراعم", t3.id, "تمهيدي", "بعد المغرب • الأحد–الخميس", 20, teacherName = n3),
+            Circle("c3", "حلقة البراعم", t3.id, "مبتدئ", "بعد المغرب • الأحد–الخميس", 20, teacherName = n3),
             Circle("c4", "حلقة الفجر للكبار", t1.id, "مراجعة", "بعد الفجر • يومياً", 12, teacherName = n1)
         )
         val names = listOf(

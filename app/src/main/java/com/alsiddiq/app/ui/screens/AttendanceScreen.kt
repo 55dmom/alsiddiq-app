@@ -121,7 +121,7 @@ fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
             Button(
                 onClick = {
                     val m = students.mapNotNull { s -> marks[s.id]?.let { s.id to it } }.toMap()
-                    actions.run(null, { repo.saveAttendance(circle.id, dayIso, m) }) { n -> actions.say("حُفظ حضور $n طالب") }
+                    actions.run(null, { repo.saveAttendance(circle.id, dayIso, m) }) { n -> actions.say("حُفظ حضور ${ArabicText.students(n)}") }
                 },
                 enabled = dirty,
                 modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)

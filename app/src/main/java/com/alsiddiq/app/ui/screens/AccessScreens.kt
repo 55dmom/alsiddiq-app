@@ -252,7 +252,7 @@ fun TeachersScreen(user: Member, nav: NavHostController) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(m.fullName, style = MaterialTheme.typography.titleSmall)
-                        Text(circles.joinToString("، ") { "${it.name} (${snap.studentsIn(it.id).size} طالب)" }.ifBlank { "بدون حلقة" },
+                        Text(circles.joinToString("، ") { "${it.name} (${ArabicText.students(snap.studentsIn(it.id).size)})" }.ifBlank { "بدون حلقة" },
                             style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (!m.active) Pill("موقوف", Brand.Red)
@@ -282,7 +282,7 @@ fun TeacherEditScreen(user: Member, nav: NavHostController, id: String) {
             AppCard {
                 Field(name, { name = it }, "اسم المعلم")
                 Spacer(Modifier.height(10.dp))
-                SelectorField("الحلقة", snap.circle(circleId)?.let { "${it.name} (${snap.studentsIn(it.id).size} طالب)" } ?: "اختر الحلقة") { pick = true }
+                SelectorField("الحلقة", snap.circle(circleId)?.let { "${it.name} (${ArabicText.students(snap.studentsIn(it.id).size)})" } ?: "اختر الحلقة") { pick = true }
                 Spacer(Modifier.height(12.dp))
                 Text(if (existing == null || stopped) "كلمة سر المعلم" else "كلمة سر جديدة (اتركها فارغة لإبقاء الحالية)", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(6.dp))
@@ -370,7 +370,7 @@ fun CircleReportScreen(user: Member, nav: NavHostController, initialCircleId: St
     var body by remember(text) { mutableStateOf(text) }
     val canPost = Permissions.canPostAnnouncement(user) && (user.role == Role.ADMIN || Permissions.teachesCircle(user, circle))
     ScreenList("تقرير اليوم", onBack = { nav.popBackStack() }) {
-        item { SelectorField("الحلقة", circle?.let { "${it.name} (${snap.studentsIn(it.id).size} طالب)" } ?: "اختر الحلقة") { pickCircle = true } }
+        item { SelectorField("الحلقة", circle?.let { "${it.name} (${ArabicText.students(snap.studentsIn(it.id).size)})" } ?: "اختر الحلقة") { pickCircle = true } }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(0L to "اليوم", 1L to "أمس").forEach { (back, label) ->
@@ -399,7 +399,7 @@ fun CircleReportScreen(user: Member, nav: NavHostController, initialCircleId: St
             }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp)) { Text("مشاركة (واتساب وغيره)") }
         }
     }
-    if (pickCircle) PickerDialog("اختر الحلقة", choices, { "${it.name} (${snap.studentsIn(it.id).size} طالب)" }, { circleId = it.id }, { pickCircle = false })
+    if (pickCircle) PickerDialog("اختر الحلقة", choices, { "${it.name} (${ArabicText.students(snap.studentsIn(it.id).size)})" }, { circleId = it.id }, { pickCircle = false })
 }
 
 fun circleReportText(snap: CenterSnapshot, circleId: String, day: LocalDate): String {

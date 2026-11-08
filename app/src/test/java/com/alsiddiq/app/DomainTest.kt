@@ -65,4 +65,16 @@ class DomainTest {
         assertEquals(15, st.memorisedAyat) // 2:1–15; revision and weak attempts don't count
         assertEquals(1, st.streakDays)
     }
+
+    @Test fun arabicStudentCounts() {
+        assertEquals("لا طلاب", ArabicText.students(0))
+        assertEquals("طالب واحد", ArabicText.students(1))
+        assertEquals("طالبان", ArabicText.students(2))
+        assertEquals("3 طلاب", ArabicText.students(3))
+        assertEquals("10 طلاب", ArabicText.students(10))
+        assertEquals("11 طالب", ArabicText.students(11))
+        assertEquals("25 طالب", ArabicText.students(25))
+        assertEquals("مبتدئ", ArabicText.level("تمهيدي"))
+        assertEquals("متوسط", ArabicText.level("متوسط"))
+    }
 }

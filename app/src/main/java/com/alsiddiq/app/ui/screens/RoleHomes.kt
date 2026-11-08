@@ -79,7 +79,7 @@ fun TeacherHome(user: Member, nav: NavHostController) {
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text("تسميع اليوم", style = MaterialTheme.typography.titleSmall)
-                            Text(if (pending.isEmpty()) "أحسنت! سُجّل جميع الطلاب" else "بقي ${pending.size} طالب لم يُسجَّل لهم", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                            Text(if (pending.isEmpty()) "أحسنت! سُجّل جميع الطلاب" else "بقي ${ArabicText.students(pending.size)} لم يُسجَّل " + when (pending.size) { 1 -> "له"; 2 -> "لهما"; else -> "لهم" }, style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                             Spacer(Modifier.height(8.dp))
                             Button(onClick = { nav.navigate("record_start") }, shape = RoundedCornerShape(12.dp)) {
                                 Icon(Icons.Filled.Add, null); Spacer(Modifier.width(4.dp)); Text("تسجيل الآن")

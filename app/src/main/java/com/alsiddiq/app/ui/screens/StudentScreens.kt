@@ -71,7 +71,7 @@ fun StudentsScreen(user: Member, nav: NavHostController, circleFilter: String?) 
             Spacer(Modifier.height(8.dp))
             ChoiceChips(options, circleIdx, { circleIdx = it })
         }
-        item { Text("${list.size} طالب", style = MaterialTheme.typography.labelMedium, color = Brand.Muted) }
+        item { Text(ArabicText.students(list.size), style = MaterialTheme.typography.labelMedium, color = Brand.Muted) }
         if (list.isEmpty()) item { EmptyState("لا يوجد طلاب", if (q.isBlank()) "أضف أول طالب للمركز" else "لا نتائج مطابقة للبحث") }
         items(list, key = { it.id }) { s ->
             StudentRow(s, snap, onClick = { nav.navigate("student/${s.id}") }) {
