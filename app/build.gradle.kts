@@ -83,6 +83,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation(project(":mushaf"))
+    implementation(project(":hifz"))
     implementation(project(":prayer"))
     implementation(project(":adhkar"))
     implementation(project(":duas"))

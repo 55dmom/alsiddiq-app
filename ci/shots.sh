@@ -53,6 +53,7 @@ adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es demo_login ga
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool mushaf; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a_tool_mushaf_index.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool mushaf_page --es page 1; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a2_tool_mushaf_page1.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool mushaf_page --es page 50; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a3_tool_mushaf_page50.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool hifz; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18a4_tool_hifz.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool prayer; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18b_tool_prayer.png
 adb shell input swipe 540 1700 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/18c_tool_prayer_scrolled.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool tasbeeh; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19_tool_tasbeeh.png

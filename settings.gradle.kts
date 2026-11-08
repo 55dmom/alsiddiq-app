@@ -9,6 +9,7 @@ rootProject.name = "AlSiddiq"
 include(":app")
 // His own side buttons («الأدوات»), as independent library modules.
 include(":mushaf")
+include(":hifz")
 include(":prayer")
 include(":adhkar")
 include(":duas")

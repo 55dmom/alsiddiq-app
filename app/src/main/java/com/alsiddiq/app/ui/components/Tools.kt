@@ -4,6 +4,8 @@ package com.alsiddiq.app.ui.components
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.alsalmi.buttons.adhkar.AdhkarActivity
 import com.alsalmi.buttons.asma.AsmaAllahActivity
 import com.alsalmi.buttons.duas.DuasActivity
+import com.alsalmi.buttons.hifz.HifzActivity
 import com.alsalmi.buttons.mushaf.MushafActivity
 import com.alsalmi.buttons.prayer.PrayerTimesActivity
 import com.alsalmi.buttons.tasbeeh.TasbeehActivity
@@ -35,6 +38,7 @@ data class ToolItem(val title: String, val sub: String, val icon: ImageVector, v
 object Tools {
     val all: List<ToolItem> = listOf(
         ToolItem("المصحف", "المصحف كامل، صفحة صفحة", Icons.Outlined.MenuBook, Brand.Green) { MushafActivity.start(it) },
+        ToolItem("وضع الحفظ", "احفظ أي سورة أو مقطع وراجع محفوظك", Icons.Outlined.AutoStories, Brand.Navy) { HifzActivity.start(it) },
         ToolItem("مواقيت الصلاة", "الأوقات والإقامة والتنبيه، بدون إنترنت", Icons.Outlined.Schedule, Brand.Orange) { PrayerTimesActivity.start(it) },
         ToolItem("الأذكار", "أذكار الصباح والمساء وغيرها", Icons.Outlined.WbSunny, Brand.Navy) { AdhkarActivity.start(it) },
         ToolItem("الأدعية", "أدعية من القرآن والسنة", Icons.Outlined.VolunteerActivism, Brand.Green) { DuasActivity.start(it) },
@@ -48,8 +52,9 @@ object Tools {
 @Composable
 fun ToolsSheet(onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+    // 7 tools now: open fully and scroll on small phones so none is cut off.
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Brand.GoldSoft), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.GridView, null, tint = Brand.Gold)
