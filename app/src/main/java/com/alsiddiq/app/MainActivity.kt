@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
             "menu" -> com.alsiddiq.app.ui.components.Tools.openOnStart = true
             "about" -> com.alsiddiq.app.ui.about.AboutActivity.start(this)
             "about_edit" -> com.alsiddiq.app.ui.about.AboutActivity.start(this, edit = true)
-            "developer" -> com.alsiddiq.app.ui.about.DeveloperActivity.start(this)
+            "developer" -> com.alsalmi.buttons.contact.ContactDeveloperActivity.start(this)
         }
         // CI screenshots of v3.2's sync line in the demo build (simulated outbox; the real one needs the central database).
         if (BuildConfig.DEBUG) intent?.getStringExtra("sim_pending")?.toIntOrNull()?.let { com.alsiddiq.app.ui.screens.SyncSim.pending = it }

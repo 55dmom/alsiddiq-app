@@ -140,6 +140,7 @@ adb shell input swipe 540 1700 540 600 400; sleep 1.5; adb exec-out screencap -p
 st 43c_about_admin_edit default --es demo_login admin --es open_tool about_edit
 adb shell input swipe 540 1700 540 600 400; sleep 1.5; adb exec-out screencap -p > shots/43d_about_admin_edit_scrolled.png
 st 43e_developer default --es demo_login gate --es open_tool developer
+st 43f_gate_about_dev_buttons default --es demo_login gate
 st 44_tools_menu_bottom default --es demo_login gate --es open_tool menu
 adb shell input swipe 540 1800 540 500 400; sleep 1.5; adb exec-out screencap -p > shots/44_tools_menu_bottom.png
 st 44b_night_about night --es demo_login gate --es open_tool about

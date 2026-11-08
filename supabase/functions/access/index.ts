@@ -1,4 +1,7 @@
-// access — the only door into «مركز الصديق» v3 (v3.1: one shared teachers' password for all circles).
+// access — the only door into «مركز الصديق» v3.
+// v3.3 (2026-11-08): every teacher has his OWN password again; the admin adds him, assigns his circle, sets/changes his
+// password or disables him (teacher_save / teacher_remove). The v3.1 shared teachers' account ('teachers') no longer
+// gets a session, and the server's RLS refuses it any write. setup creates admin + general (viewer) only.
 // One password field: the server works out whose password it is (viewer / admin / which teacher),
 // by bcrypt-comparing it with the hashes Supabase Auth stores, then returns that account's session.
 // Passwords are never stored or compared in the app. The service key exists only here, on the server.
@@ -13,6 +16,7 @@ const ALL_FAILS = 60;      // wrong attempts from everyone per 10 minutes
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type" };
 const out = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+const SHARED_TEACHERS_RETIRED = "كلمة سر المعلمين المشتركة ما عادت تفتح التعديل، اطلب كلمة سرك من الإدارة";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function call(method: string, path: string, body?: unknown, extra: Record<string, string> = {}, key = KEY) {
@@ -74,16 +78,11 @@ async function circlesOf(center: string, teacher: string) {
   const r = await rest("GET", `circles?select=id&center_id=eq.${center}&teacher_id=eq.${teacher}`);
   return Array.isArray(r.data) ? r.data.map((c: any) => c.id) : [];
 }
-async function allCircles(center: string) {
-  const r = await rest("GET", `circles?select=id&center_id=eq.${center}`);
-  return Array.isArray(r.data) ? r.data.map((c: any) => c.id) : [];
-}
 async function profileOut(center: string, p: any) {
-  // v3.1: the shared teachers' account ('teachers') opens every circle of the centre.
-  const circle_ids = p.access_kind === "teachers" ? await allCircles(center)
-                   : p.access_kind === "teacher" ? await circlesOf(center, p.id) : [];
+  // v3.3: a teacher edits only his own circle(s); circle_ids = the circles he may EDIT (he still VIEWS all, read-only).
+  const circle_ids = p.access_kind === "teacher" ? await circlesOf(center, p.id) : [];
   return { id: p.id, full_name: p.full_name, role: p.role, access_kind: p.access_kind,
-           all_circles: p.access_kind === "teachers", circle_ids };
+           all_circles: false, circle_ids };
 }
 async function activeOf(center: string, kind: string) {
   return (await accounts(center, kind)).find((a: any) => a.active);
@@ -124,29 +123,26 @@ Deno.serve(async (req) => {
     if (action === "status") {
       const admins = center ? await accounts(center.id, "admin") : [];
       const teachers = center ? await activeOf(center.id, "teachers") : undefined;
-      return out(200, { needs_setup: admins.length === 0, center_name: center?.name ?? "", has_teachers_password: !!teachers });
+      // has_teachers_password: a v3.1 shared teachers' account still exists (it opens nothing any more).
+      return out(200, { needs_setup: admins.length === 0, center_name: center?.name ?? "", has_teachers_password: !!teachers,
+                        per_teacher: true });
     }
 
     // First run: centre name + admin password + general (viewer) password. Only while no admin password exists.
+    // v3.3: no teachers' account is created here; an old client's teachers_password is ignored.
     if (action === "setup") {
       if (center && (await accounts(center.id, "admin")).length > 0) return out(403, { error: "تم إعداد المركز مسبقاً" });
       const name = clean(body.center_name) || "مركز الصديق لتعليم القرآن الكريم";
       const apw = normPw(body.admin_password), vpw = normPw(body.viewer_password);
-      const tpw = body.teachers_password ? normPw(body.teachers_password) : "";   // v3.1, optional for old clients
-      const bad = checkPw(apw) ?? checkPw(vpw) ?? (tpw ? checkPw(tpw) : null);
+      const bad = checkPw(apw) ?? checkPw(vpw);
       if (bad) return out(400, { error: bad });
       if (apw === vpw) return out(400, { error: "كلمة سر الإدارة يجب أن تختلف عن كلمة السر العامة" });
-      if (tpw && (tpw === apw || tpw === vpw)) return out(400, { error: "كلمة سر المعلمين يجب أن تختلف عن كلمة سر الإدارة والكلمة العامة" });
       let c = center;
       if (c) { await rest("PATCH", `centers?id=eq.${c.id}`, { name }); }
       else { const r = await rest("POST", "centers", { name }); if (!r.ok) throw new Error(errMsg(r.data)); c = r.data[0]; }
       for (const old of await accounts(c.id, "viewer")) await rest("PATCH", `profiles?id=eq.${old.id}`, { active: false });
       const admin = await newAccount(c.id, "admin", "admin", "الإدارة", apw);
       await newAccount(c.id, "viewer", "viewer", "عرض عام", vpw);
-      if (tpw) {
-        for (const old of await accounts(c.id, "teachers")) await rest("PATCH", `profiles?id=eq.${old.id}`, { active: false });
-        await newAccount(c.id, "teachers", "teacher", "المعلمون", tpw);
-      }
       const s = await sessionFor((await call("GET", `/auth/v1/admin/users/${admin.id}`)).data.email, apw);
       return out(200, { session: s, profile: await profileOut(c.id, admin), center_name: name });
     }
@@ -158,13 +154,18 @@ Deno.serve(async (req) => {
       const pw = normPw(body.password);
       const ip = ipOf(req);
       if (await throttled(ip)) return out(429, { error: "محاولات خاطئة كثيرة، انتظر ربع ساعة ثم حاول" });
-      const found = pw.length >= 1 ? await matches(center.id, kind, pw) : [];
+      const all = pw.length >= 1 ? await matches(center.id, kind, pw) : [];
+      // v3.3: the v3.1 shared teachers' account never gets a session.
+      let shared = all.some((m: any) => m.kind === "teachers");
+      const found = all.filter((m: any) => m.kind !== "teachers");
       if (found.length === 0) {
+        if (!shared && kind === "teacher" && pw.length >= 1) shared = (await matches(center.id, "teachers", pw)).length > 0;
         await logAttempt(ip, kind, false);
         await sleep(1200);
+        if (shared) return out(401, { error: SHARED_TEACHERS_RETIRED, code: "shared_teachers_retired" });
         return out(401, { error: "كلمة السر غير صحيحة" });
       }
-      const order = ["admin", "teachers", "teacher", "viewer"];
+      const order = ["admin", "teacher", "viewer"];
       found.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
       const m = found[0];
       await logAttempt(ip, kind, true);
@@ -177,15 +178,15 @@ Deno.serve(async (req) => {
     const me = await caller(req);
     if (!me || me.access_kind !== "admin" || !center || me.center_id !== center.id) return out(403, { error: "هذه العملية للإدارة فقط" });
 
-    if (action === "set_password") {             // target: "viewer" | "admin" | "teachers" (v3.1)
-      const target = ["admin", "viewer", "teachers"].includes(body.target) ? body.target : null;
+    if (action === "set_password") {             // target: "viewer" | "admin" (v3.3: a teacher's password is teacher_save)
+      if (body.target === "teachers") return out(400, { error: "ما عاد فيه كلمة سر مشتركة للمعلمين، كل معلم له كلمة سره من «المعلمين» في الإدارة", code: "shared_teachers_retired" });
+      const target = ["admin", "viewer"].includes(body.target) ? body.target : null;
       if (!target) return out(400, { error: "طلب غير صالح" });
       const pw = normPw(body.password); const bad = checkPw(pw); if (bad) return out(400, { error: bad });
       const acc = target === "admin" ? me : await activeOf(center.id, target);
       if (await passwordTaken(center.id, pw, acc?.id)) return out(409, { error: "كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها" });
       if (acc) await setPassword(acc.id, pw);   // also ends every session of that account
       else if (target === "viewer") await newAccount(center.id, "viewer", "viewer", "عرض عام", pw);
-      else await newAccount(center.id, "teachers", "teacher", "المعلمون", pw);
       return out(200, { ok: true });
     }
 
@@ -197,9 +198,15 @@ Deno.serve(async (req) => {
       if (!id && !pw) return out(400, { error: "اختر كلمة سر للمعلم" });
       if (pw) { const bad = checkPw(pw); if (bad) return out(400, { error: bad });
                 if (await passwordTaken(center.id, pw, id || undefined)) return out(409, { error: "كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها" }); }
+      if (body.circle_id) {
+        const c = await rest("GET", `circles?select=id&id=eq.${encodeURIComponent(clean(body.circle_id))}&center_id=eq.${center.id}`);
+        if (!Array.isArray(c.data) || !c.data.length) return out(404, { error: "الحلقة غير موجودة" });
+      }
       if (id) {
         const t = (await accounts(center.id, "teacher")).find((a: any) => a.id === id);
         if (!t) return out(404, { error: "المعلم غير موجود" });
+        // A disabled teacher's password was scrambled by teacher_remove: enabling him again needs a new one.
+        if (!t.active && !pw) return out(400, { error: "المعلم موقوف، اختر له كلمة سر جديدة لتفعيله" });
         await rest("PATCH", `profiles?id=eq.${id}`, { full_name: name, active: true });
         if (pw) await setPassword(id, pw);
       } else {
@@ -208,9 +215,11 @@ Deno.serve(async (req) => {
       if (body.circle_id !== undefined) {
         const cid = clean(body.circle_id);
         // One circle per teacher in this screen: release their other circles, then take this one.
-        await rest("PATCH", `circles?center_id=eq.${center.id}&teacher_id=eq.${id}` + (cid ? `&id=neq.${cid}` : ""), { teacher_id: null });
+        await rest("PATCH", `circles?center_id=eq.${center.id}&teacher_id=eq.${id}` + (cid ? `&id=neq.${cid}` : ""), { teacher_id: null, teacher_name: null });
         if (cid) await rest("PATCH", `circles?id=eq.${cid}&center_id=eq.${center.id}`, { teacher_id: id });
       }
+      // The circle card shows teacher_name first (v3.1): keep it equal to his name on every circle he holds.
+      await rest("PATCH", `circles?center_id=eq.${center.id}&teacher_id=eq.${id}`, { teacher_name: name });
       const p = (await rest("GET", `profiles?select=*&id=eq.${id}`)).data[0];
       return out(200, { profile: await profileOut(center.id, p) });
     }
@@ -220,7 +229,7 @@ Deno.serve(async (req) => {
       const t = (await accounts(center.id, "teacher")).find((a: any) => a.id === id);
       if (!t) return out(404, { error: "المعلم غير موجود" });
       await rest("PATCH", `profiles?id=eq.${id}`, { active: false });
-      await rest("PATCH", `circles?teacher_id=eq.${id}`, { teacher_id: null });
+      await rest("PATCH", `circles?teacher_id=eq.${id}`, { teacher_id: null, teacher_name: null });
       await call("PUT", `/auth/v1/admin/users/${id}`, { password: crypto.randomUUID() + crypto.randomUUID() });
       await rpc("access_revoke", { p_user: id });
       return out(200, { ok: true });

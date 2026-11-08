@@ -30,9 +30,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- v3.4: «عن المركز» (للجميع) و«تواصل مع المطور». -->
+        <!-- v3.4: «عن المركز» (للجميع). «تواصل مع المطوّر» is his own module (contact) and brings its own activity. -->
         <activity android:name=".ui.about.AboutActivity" android:exported="false" android:theme="@style/Theme.AlSiddiq" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".ui.about.DeveloperActivity" android:exported="false" android:theme="@style/Theme.AlSiddiq" />
         <!-- v3.1: the camera app writes the student photo here (app cache only), then it is shrunk and uploaded. -->
         <provider
             android:name="androidx.core.content.FileProvider"

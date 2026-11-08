@@ -10,6 +10,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.CoPresent
 import androidx.compose.material.icons.outlined.Lock
@@ -134,6 +136,23 @@ fun LoginScreen() {
                 Spacer(Modifier.height(10.dp))
                 Text("كلمة السر تحصل عليها من إدارة المركز", style = MaterialTheme.typography.bodySmall, color = Brand.Muted,
                     textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        // v3.4: open to everyone before any password: «عن المركز» and his «تواصل مع المطوّر».
+        Spacer(Modifier.height(12.dp))
+        val gateCtx = androidx.compose.ui.platform.LocalContext.current
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Surface(onClick = { com.alsiddiq.app.ui.about.AboutActivity.start(gateCtx) }, shape = RoundedCornerShape(50), color = Brand.Card, shadowElevation = 2.dp, modifier = Modifier.weight(1f)) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Icon(Icons.Outlined.Info, null, tint = Brand.Navy, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                    Text("عن المركز", color = Brand.Navy, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            Surface(onClick = { com.alsalmi.buttons.contact.ContactDeveloperActivity.start(gateCtx) }, shape = RoundedCornerShape(50), color = Brand.Card, shadowElevation = 2.dp, modifier = Modifier.weight(1f)) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Icon(Icons.AutoMirrored.Outlined.Send, null, tint = Color(0xFF29A1DE), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                    Text("تواصل مع المطوّر", color = Brand.Navy, style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
         if (demo) {
