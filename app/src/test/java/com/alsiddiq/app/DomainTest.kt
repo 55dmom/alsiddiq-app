@@ -17,17 +17,16 @@ class DomainTest {
     private val s2 = Student("s2", "S2", circleId = "c2", joinedOn = "2026-01-01")
     private val snap = CenterSnapshot(members = listOf(admin, teacher, other, viewer), circles = listOf(c1, c2), students = listOf(s1, s2))
 
-    @Test fun sharedTeachersPasswordOpensEveryCircle() {
+    @Test fun v33SharedTeachersAccountNoLongerEdits() {
         val shared = Member("tt", "المعلمون", "", Role.TEACHER, allCircles = true)
-        assertTrue(Permissions.canRecordFor(shared, s1, snap))
-        assertTrue(Permissions.canRecordFor(shared, s2, snap))
-        assertTrue(Permissions.canEditStudent(shared, s2, snap))
-        assertTrue(Permissions.canAddStudentTo(shared, "c2", snap))
-        assertTrue(Permissions.canAddStudentTo(shared, null, snap))
-        assertTrue(Permissions.teachesCircle(shared, c2))
-        assertEquals(listOf("c1", "c2"), Permissions.visibleCircles(shared, snap).map { it.id })
-        assertEquals(listOf("s1", "s2"), Permissions.visibleStudents(shared, snap).map { it.id })
-        assertFalse(Permissions.canManageStudents(shared))
+        assertFalse(Permissions.canRecordFor(shared, s1, snap))
+        assertFalse(Permissions.canRecordFor(shared, s2, snap))
+        assertFalse(Permissions.canEditStudent(shared, s2, snap))
+        assertFalse(Permissions.canAddStudentTo(shared, "c2", snap))
+        assertFalse(Permissions.canAddStudentTo(shared, null, snap))
+        assertFalse(Permissions.teachesCircle(shared, c2))
+        assertTrue(Permissions.ownCircles(shared, snap).isEmpty())
+        assertTrue(Permissions.isReadOnly(shared))
         assertFalse(Permissions.canManageMembers(shared))
         assertEquals("أحمد", snap.recorder("أحمد", "tt"))
         assertEquals("Admin", snap.recorder(null, "a"))
@@ -40,13 +39,18 @@ class DomainTest {
         assertFalse(Permissions.canRecordFor(viewer, s1, snap))
         assertFalse(Permissions.canEditStudent(viewer, s1, snap))
         assertEquals(listOf("s1", "s2"), Permissions.visibleStudents(viewer, snap).map { it.id })
-        assertEquals(listOf("s1"), Permissions.visibleStudents(teacher, snap).map { it.id })
+        // v3.3: a teacher VIEWS every circle, EDITS only his own
+        assertEquals(listOf("s1", "s2"), Permissions.visibleStudents(teacher, snap).map { it.id })
+        assertEquals(listOf("c1", "c2"), Permissions.visibleCircles(teacher, snap).map { it.id })
+        assertEquals(listOf("c1"), Permissions.ownCircles(teacher, snap).map { it.id })
+        assertEquals(listOf("s1"), Permissions.ownStudents(teacher, snap).map { it.id })
         assertTrue(Permissions.canEditStudent(teacher, s1, snap))
         assertFalse(Permissions.canEditStudent(teacher, s2, snap))
         assertFalse(Permissions.canAddStudentTo(teacher, "c2", snap))
         assertTrue(Permissions.canAddStudentTo(teacher, "c1", snap))
-        assertEquals(listOf("c1"), Permissions.visibleCircles(teacher, snap).map { it.id })
         assertFalse(Permissions.canManageStudents(teacher))
+        assertTrue(Permissions.ownCircles(viewer, snap).isEmpty())
+        assertEquals(listOf("c1", "c2"), Permissions.ownCircles(admin, snap).map { it.id })
     }
 
     @Test fun memorisedCountsUnionNotSum() {

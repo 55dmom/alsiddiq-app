@@ -68,7 +68,10 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
     private fun visibleTo(user: Member?): CenterSnapshot {
         val all = store.data
         if (user == null) return CenterSnapshot(center = all.center)
-        if (user.role == Role.ADMIN || user.role == Role.VIEWER) return all.copy(notifications = all.notifications.filter { it.userId == user.id })
+        // v3.3: teachers read the whole centre too (they edit only their own circle).
+        if (user.role == Role.ADMIN || user.role == Role.VIEWER || user.role == Role.TEACHER) return all.copy(
+            notifications = all.notifications.filter { it.userId == user.id },
+            announcements = all.announcements.filter { Permissions.audienceIncludes(it.audience, user.role) })
         val students = Permissions.visibleStudents(user, all)
         val ids = students.map { it.id }.toSet()
         val circles = Permissions.visibleCircles(user, all)
@@ -176,7 +179,44 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         val n = name?.trim()?.takeIf { it.isNotEmpty() }
         prefs.edit().putString("recorder_name", n).apply(); _recorder.value = n
     }
-    private fun byName(u: Member): String? = if (u.role == Role.TEACHER) _recorder.value else null
+    /** v3.3: a teacher's records carry his own name. */
+    private fun byName(u: Member): String? = if (u.role == Role.TEACHER && !u.allCircles) u.fullName else null
+
+    override suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member> = lock.withLock {
+        val u = _user.value ?: return Result.failure(PermissionDenied())
+        if (!Permissions.canManageMembers(u)) return Result.failure(PermissionDenied())
+        if (name.isBlank()) return Result.failure(ValidationError("اكتب اسم المعلم"))
+        val pw = password?.let { normPw(it) }?.takeIf { it.isNotEmpty() }
+        val existing = store.data.member(id)?.takeIf { it.role == Role.TEACHER }
+        if (existing == null && pw == null) return Result.failure(ValidationError("اختر كلمة سر للمعلم"))
+        if (existing != null && !existing.active && pw == null) return Result.failure(ValidationError("المعلم موقوف: اختر له كلمة سر جديدة لتشغيله"))
+        if (pw != null && pw.length < 6) return Result.failure(ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل"))
+        val mid = existing?.id ?: newId()
+        if (pw != null && store.passwordHashes.any { (k, ph) -> k != mid && ph == hash(pw) }) return Result.failure(ValidationError("كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها"))
+        val saved = (existing ?: Member(mid, "", "", Role.TEACHER)).copy(fullName = name.trim(), active = true)
+        val d0 = store.data
+        val members = if (existing != null) d0.members.map { if (it.id == mid) saved else it } else d0.members + saved
+        val circles = d0.circles.map { c -> when {
+            c.id == circleId -> c.copy(teacherId = mid, teacherName = saved.fullName)
+            c.teacherId == mid -> c.copy(teacherId = null, teacherName = null)
+            else -> c } }
+        store = store.copy(data = d0.copy(members = members, circles = circles),
+            passwordHashes = if (pw != null) store.passwordHashes + (mid to hash(pw)) else store.passwordHashes)
+        persist(); _snapshot.value = visibleTo(u)
+        Result.success(saved)
+    }
+
+    override suspend fun removeTeacher(id: String): Result<Unit> = lock.withLock {
+        val u = _user.value ?: return Result.failure(PermissionDenied())
+        if (!Permissions.canManageMembers(u)) return Result.failure(PermissionDenied())
+        val d0 = store.data
+        store = store.copy(data = d0.copy(
+            members = d0.members.map { if (it.id == id) it.copy(active = false) else it },
+            circles = d0.circles.map { if (it.teacherId == id) it.copy(teacherId = null, teacherName = null) else it }),
+            passwordHashes = store.passwordHashes - id)
+        persist(); _snapshot.value = visibleTo(u)
+        Result.success(Unit)
+    }
 
     private val photoDir = File(context.filesDir, "demo_photos").apply { mkdirs() }
     override suspend fun setStudentPhoto(studentId: String, jpeg: ByteArray?) = mutate { d, u ->
@@ -307,4 +347,27 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
 
     private fun notify(d: CenterSnapshot, userIds: List<String>, title: String, body: String, kind: String, ref: String?) =
         userIds.distinct().map { AppNotification(newId(), it, title, body, kind, ref) }
+
+    // ---------------- v3.4 «عن المركز» (demo: kept on this phone only) ----------------
+    private val aboutLocal = AboutLocal(context)
+    override val about: StateFlow<AboutPage> = aboutLocal.flow.asStateFlow()
+    override suspend fun refreshAbout() {}
+    override suspend fun aboutPhoto(path: String): ByteArray? = aboutLocal.cached(path)
+    private fun adminOnly() { if (_user.value?.role != Role.ADMIN) throw PermissionDenied() }
+    override suspend fun saveAboutText(body: String): Result<Unit> = runCatching { adminOnly(); aboutLocal.set(aboutLocal.page.copy(body = body.trim(), updatedAt = System.currentTimeMillis())) }
+    override suspend fun addAboutPhoto(jpeg: ByteArray): Result<Unit> = runCatching {
+        adminOnly(); val p = "demo/" + newId().take(8) + ".jpg"; aboutLocal.cache(p, jpeg)
+        aboutLocal.set(aboutLocal.page.copy(body = aboutLocal.currentText(), photos = aboutLocal.page.photos + p))
+    }
+    override suspend fun removeAboutPhoto(path: String): Result<Unit> = runCatching {
+        adminOnly(); aboutLocal.set(aboutLocal.page.copy(body = aboutLocal.currentText(), photos = aboutLocal.page.photos - path)); aboutLocal.forget(path)
+    }
+    override suspend fun saveAboutButton(b: AboutButton): Result<Unit> = runCatching {
+        adminOnly(); if (b.label.isBlank() || b.value.isBlank()) throw ValidationError("اكتب اسم الزر وقيمته")
+        val list = aboutLocal.page.buttons
+        val saved = if (b.id.isBlank()) b.copy(id = newId(), sort = (list.maxOfOrNull { it.sort } ?: -1) + 1) else b
+        aboutLocal.set(aboutLocal.page.copy(buttons = AboutLocal.sorted(list.filterNot { it.id == saved.id } + saved)))
+    }
+    override suspend fun deleteAboutButton(id: String): Result<Unit> = runCatching { adminOnly(); aboutLocal.set(aboutLocal.page.copy(buttons = aboutLocal.page.buttons.filterNot { it.id == id })) }
+    override suspend fun moveAboutButton(id: String, up: Boolean): Result<Unit> = runCatching { adminOnly(); aboutLocal.set(aboutLocal.page.copy(buttons = AboutLocal.move(aboutLocal.page.buttons, id, up))) }
 }

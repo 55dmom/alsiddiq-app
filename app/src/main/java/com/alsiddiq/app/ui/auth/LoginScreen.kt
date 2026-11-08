@@ -138,7 +138,7 @@ fun LoginScreen() {
         }
         if (demo) {
             Spacer(Modifier.height(18.dp)); DemoBanner(); Spacer(Modifier.height(8.dp))
-            Text("نسخة تجريبية: العرض ${DemoSeed.VIEWER_PASSWORD} • الإدارة ${DemoSeed.ADMIN_PASSWORD} • المعلمين ${DemoSeed.TEACHER_PASSWORD}",
+            Text("نسخة تجريبية: العرض ${DemoSeed.VIEWER_PASSWORD} • الإدارة ${DemoSeed.ADMIN_PASSWORD} • معلم ${DemoSeed.TEACHER_PASSWORD}",
                 style = MaterialTheme.typography.bodySmall, color = Brand.Muted, textAlign = TextAlign.Center)
         }
     }
@@ -171,11 +171,11 @@ fun RoleLoginScreen(kind: Role, onBack: () -> Unit) {
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(if (admin) "دخول الإدارة" else "دخول المعلمين", style = MaterialTheme.typography.titleLarge)
-                        Text(if (admin) "كلمة سر الإدارة" else "كلمة سر المعلمين (تفتح كل الحلقات)", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                        Text(if (admin) "كلمة سر الإدارة" else "كلمة سرك الخاصة (من الإدارة): تعدّل حلقتك وتشاهد البقية", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                PasswordField(pass, { pass = it; error = null }, if (admin) "كلمة سر الإدارة" else "كلمة سر المعلمين", onDone = { submit() })
+                PasswordField(pass, { pass = it; error = null }, if (admin) "كلمة سر الإدارة" else "كلمة سر المعلم", onDone = { submit() })
                 if (error != null) { Spacer(Modifier.height(8.dp)); Text(error!!, color = Brand.Red, style = MaterialTheme.typography.bodySmall) }
                 Spacer(Modifier.height(18.dp))
                 Button(onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
@@ -199,25 +199,21 @@ fun SetupScreen(onDone: () -> Unit) {
     var a2 by remember { mutableStateOf("") }
     var v1 by remember { mutableStateOf("") }
     var v2 by remember { mutableStateOf("") }
-    var t1 by remember { mutableStateOf("") }
-    var t2 by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     fun submit() {
         error = when {
             center.isBlank() -> "اكتب اسم المركز"
-            a1.length < 6 || v1.length < 6 || t1.length < 6 -> "كلمة السر 6 أحرف أو أرقام على الأقل"
+            a1.length < 6 || v1.length < 6 -> "كلمة السر 6 أحرف أو أرقام على الأقل"
             a1 != a2 -> "تأكيد كلمة سر الإدارة غير مطابق"
             v1 != v2 -> "تأكيد كلمة السر العامة غير مطابق"
-            t1 != t2 -> "تأكيد كلمة سر المعلمين غير مطابق"
             a1 == v1 -> "كلمة سر الإدارة يجب أن تختلف عن كلمة السر العامة"
-            t1 == a1 || t1 == v1 -> "كلمة سر المعلمين يجب أن تختلف عن الإدارة والعامة"
             else -> null
         }
         if (error != null) return
         busy = true
         scope.launch {
-            container.auth.setup(center, a1, v1, t1).onSuccess { onDone() }.onFailure { error = it.message ?: "تعذّر الإعداد" }
+            container.auth.setup(center, a1, v1).onSuccess { onDone() }.onFailure { error = it.message ?: "تعذّر الإعداد" }
             busy = false
         }
     }
@@ -241,14 +237,9 @@ fun SetupScreen(onDone: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 PasswordField(v1, { v1 = it; error = null }, "كلمة السر العامة")
                 Spacer(Modifier.height(8.dp))
-                PasswordField(v2, { v2 = it; error = null }, "تأكيد كلمة السر العامة")
-                Spacer(Modifier.height(14.dp))
-                Text("كلمة سر المعلمين (واحدة لكل المعلمين)", style = MaterialTheme.typography.titleSmall, color = Brand.Maroon)
-                Text("تفتح كل الحلقات: الحفظ والمراجعة والحضور وإضافة الطلاب وتقرير اليوم", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-                Spacer(Modifier.height(6.dp))
-                PasswordField(t1, { t1 = it; error = null }, "كلمة سر المعلمين")
-                Spacer(Modifier.height(8.dp))
-                PasswordField(t2, { t2 = it; error = null }, "تأكيد كلمة سر المعلمين", onDone = { submit() })
+                PasswordField(v2, { v2 = it; error = null }, "تأكيد كلمة السر العامة", onDone = { submit() })
+                Spacer(Modifier.height(10.dp))
+                Text("كلمات سر المعلمين: لكل معلم كلمة سر خاصة تضيفها الإدارة لاحقاً من الإعدادات ← الإدارة ← المعلمون.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                 if (error != null) { Spacer(Modifier.height(8.dp)); Text(error!!, color = Brand.Red, style = MaterialTheme.typography.bodySmall) }
                 Spacer(Modifier.height(18.dp))
                 Button(onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) {

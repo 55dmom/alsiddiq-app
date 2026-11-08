@@ -10,7 +10,7 @@ internal object Rows {
     private fun JsonObject.s(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull
     private fun JsonObject.i(k: String): Int? = (this[k] as? JsonPrimitive)?.intOrNull
     private fun JsonObject.b(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanOrNull
-    private fun ts(v: String?): Long = v?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() } ?: 0L
+    fun ts(v: String?): Long = v?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() } ?: 0L
     fun iso(ms: Long): String = Instant.ofEpochMilli(ms).toString()
     private inline fun <reified E : Enum<E>> enumOf(v: String?, d: E): E =
         v?.let { s -> enumValues<E>().firstOrNull { it.name.equals(s, ignoreCase = true) } } ?: d

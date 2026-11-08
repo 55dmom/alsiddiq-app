@@ -55,7 +55,8 @@ fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
     val snap = snapshot()
     val actions = rememberActions()
     val repo = LocalContainer.current.center
-    val circles = Permissions.visibleCircles(user, snap)
+    // v3.3: a teacher takes attendance in his own circle(s) only.
+    val circles = Permissions.ownCircles(user, snap)
     var circleIdx by remember { mutableIntStateOf(circles.indexOfFirst { it.id == circleId }.coerceAtLeast(0)) }
     var day by remember { mutableStateOf(LocalDate.now()) }
     val circle = circles.getOrNull(circleIdx)
@@ -99,6 +100,7 @@ fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
                     StudentAvatar(s, 36.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(s.fullName, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    if (isPending(com.alsiddiq.app.domain.SyncPolicy.attendanceKey(s.id, dayIso))) PendingChip()
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -123,7 +125,7 @@ fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
                 },
                 enabled = dirty,
                 modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)
-            ) { Text(if (dirty) "حفظ الحضور" else "محفوظ ✓") }
+            ) { Text(if (dirty) "حفظ الحضور" else if (isPending("att:${circle.id}:$dayIso")) "محفوظ على الجهاز • بانتظار الإرسال" else "محفوظ ✓") }
             Text("يصل إشعار لولي الأمر عند تسجيل الغياب.", style = MaterialTheme.typography.labelSmall, color = Brand.Muted, modifier = Modifier.padding(top = 6.dp))
         }
     }

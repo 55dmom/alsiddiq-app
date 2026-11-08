@@ -53,7 +53,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun RecordStartScreen(user: Member, nav: NavHostController) {
     val snap = snapshot()
-    val circles = Permissions.visibleCircles(user, snap)
+    val circles = Permissions.ownCircles(user, snap)   // v3.3: record in his own circle(s)
     var circleIdx by remember { mutableIntStateOf(0) }
     val circle = circles.getOrNull(circleIdx)
     val students = circle?.let { c -> snap.studentsIn(c.id).sortedBy { it.fullName } } ?: emptyList()

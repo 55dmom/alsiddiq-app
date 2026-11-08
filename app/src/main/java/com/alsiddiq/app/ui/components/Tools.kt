@@ -89,6 +89,8 @@ fun ToolsSheet(onDismiss: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             ThemesEntry()
+            Spacer(Modifier.height(8.dp))
+            com.alsiddiq.app.ui.about.CenterInfoEntries(onOpen = onDismiss)
             Spacer(Modifier.height(6.dp))
             Text("أدوات أكثر قريباً", style = MaterialTheme.typography.labelSmall, color = Brand.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }

@@ -197,6 +197,7 @@ fun MoreScreen(user: Member, nav: NavHostController) {
         items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
         item { SectionHeader("المظهر") }
         item { ThemesMenuItem() }
+        item { com.alsiddiq.app.ui.about.CenterInfoEntries() }
         item { SectionHeader("المتابعة") }
         item { MenuRow("الحضور والغياب", "تسجيل ومراجعة الحضور", Icons.Outlined.FactCheck) { nav.navigate("attendance") } }
         items(snap.circles.sortedBy { it.name }.take(6)) { c -> MenuRow("تقرير ${c.name}", "كم حفظوا ومن غاب", Icons.Outlined.Summarize, Brand.Gold) { nav.navigate("circle_report/${c.id}") } }

@@ -113,4 +113,35 @@ oc 33_occ_sep26_popup 2026-09-26 --es demo_login gate; adb shell input keyevent 
 oc 33b_occ_sep26_home 2026-09-26 --es demo_login viewer --es route home
 oc 34_occ_none_after 2026-11-08 --es demo_login viewer --es route home
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/30_occasions.crash.txt; [ -s shots/30_occasions.crash.txt ] || rm -f shots/30_occasions.crash.txt
+# v3.3 per-teacher passwords: the admin's teachers screens; a teacher edits his circle and views the others read-only
+adb logcat -c
+st 40_admin_teachers default --es demo_login admin --es route teachers
+st 40b_admin_teacher_edit default --es demo_login admin --es route teacher_edit/m-t2
+st 40c_admin_teacher_new default --es demo_login admin --es route teacher_edit/new
+st 40d_admin_passwords default --es demo_login admin --es route passwords
+st 41_teacher_home_own default --es demo_login teacher --es route home
+st 41b_teacher_other_circle_readonly default --es demo_login teacher --es route circle/c2
+st 41c_teacher_other_student_readonly default --es demo_login teacher --es route student/s2
+st 41d_teacher_own_student default --es demo_login teacher --es route student/s1
+st 41e_teacher_all_circles default --es demo_login teacher --es route circles
+st 41f_teacher_more default --es demo_login teacher --es route teacher_more
+# v3.2 offline sync line (simulated outbox in the demo build) and the «بانتظار الإرسال» chips
+TODAY=$(adb shell date +%F | tr -d '\r')
+st 42_sync_pending default --es demo_login teacher --es route home --es sim_pending 3
+st 42b_sync_reauth default --es demo_login teacher --es route home --es sim_pending 3 --ez sim_reauth true
+st 42c_sync_attendance_chips default --es demo_login teacher --es route attendance --es sim_pending 2 --es sim_keys "att:s1:$TODAY,att:s5:$TODAY"
+st 42d_sync_students_chips default --es demo_login teacher --es route students --es sim_pending 2 --es sim_keys "s1,s5"
+st 42e_sync_all_up default --es demo_login teacher --es route home --es sim_pending 0
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/40_teachers_sync.crash.txt; [ -s shots/40_teachers_sync.crash.txt ] || rm -f shots/40_teachers_sync.crash.txt
+# v3.4 «عن المركز» (everyone) + admin editing, and «تواصل مع المطور»
+adb logcat -c
+st 43_about default --es demo_login gate --es open_tool about
+adb shell input swipe 540 1700 540 600 400; sleep 1.5; adb exec-out screencap -p > shots/43b_about_scrolled.png
+st 43c_about_admin_edit default --es demo_login admin --es open_tool about_edit
+adb shell input swipe 540 1700 540 600 400; sleep 1.5; adb exec-out screencap -p > shots/43d_about_admin_edit_scrolled.png
+st 43e_developer default --es demo_login gate --es open_tool developer
+st 44_tools_menu_bottom default --es demo_login gate --es open_tool menu
+adb shell input swipe 540 1800 540 500 400; sleep 1.5; adb exec-out screencap -p > shots/44_tools_menu_bottom.png
+st 44b_night_about night --es demo_login gate --es open_tool about
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/43_about.crash.txt; [ -s shots/43_about.crash.txt ] || rm -f shots/43_about.crash.txt
 ls -la shots

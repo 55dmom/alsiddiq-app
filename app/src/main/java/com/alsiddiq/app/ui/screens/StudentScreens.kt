@@ -63,7 +63,7 @@ fun StudentsScreen(user: Member, nav: NavHostController, circleFilter: String?) 
     }
     ScreenList("الطلاب", fab = {
         if (user.role == Role.ADMIN) AddFab("طالب جديد") { nav.navigate("student_edit/new") }
-        else if (user.role == Role.TEACHER && circles.isNotEmpty()) AddFab("طالب جديد") { nav.navigate("student_edit/new?circle=${circles.first().id}") }
+        else if (user.role == Role.TEACHER && Permissions.ownCircles(user, snap).isNotEmpty()) AddFab("طالب جديد") { nav.navigate("student_edit/new?circle=${Permissions.ownCircles(user, snap).first().id}") }
     }) {
         item {
             OutlinedTextField(q, { q = it }, placeholder = { Text("بحث باسم الطالب") }, singleLine = true,
@@ -95,6 +95,7 @@ fun StudentDetailScreen(user: Member, nav: NavHostController, id: String) {
     }, fab = {
         if (canRecord) AddFab("تسجيل تسميع") { nav.navigate("record/${s.id}") }
     }) {
+        if (user.role == Role.TEACHER && !canRecord) item { ReadOnlyNote("عرض فقط: الطالب في حلقة ${snap.circle(s.circleId)?.name ?: "أخرى"}، والتعديل لمعلمها وللإدارة.") }
         item { StudentPhotoCard(s, Permissions.canEditStudent(user, s, snap)) }
         studentDashboard(this, s, snap, nav, user)
     }
@@ -224,7 +225,7 @@ fun StudentEditScreen(user: Member, nav: NavHostController, id: String, presetCi
             }
         }
     }
-    if (pickCircle) PickerDialog("اختر الحلقة", Permissions.visibleCircles(user, snap), { it.name }, { circleId = it.id }, { pickCircle = false })
+    if (pickCircle) PickerDialog("اختر الحلقة", Permissions.ownCircles(user, snap), { it.name }, { circleId = it.id }, { pickCircle = false })
     if (askDelete && existing != null) ConfirmDialog(
         "حذف الطالب؟", "ستُحذف جميع سجلاته وحضوره ومكافآته نهائياً.", "حذف",
         { actions.run("حُذف الطالب", { repo.deleteStudent(existing.id) }) { if (!nav.popBackStack("students", false)) nav.popBackStack("home", false) } },

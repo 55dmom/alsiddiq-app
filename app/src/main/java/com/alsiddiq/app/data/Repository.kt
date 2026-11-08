@@ -38,8 +38,8 @@ interface AuthRepository {
     suspend fun needsSetup(): Boolean? = false
     /** The centre name shown on the password screen (cached). */
     val centerName: StateFlow<String>
-    /** v3.1: the setup also creates the ONE shared teachers' password. */
-    suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String, teachersPassword: String): Result<Member> =
+    /** v3.3: the setup asks for the admin and the general passwords only (each teacher gets his own from the admin). */
+    suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String): Result<Member> =
         Result.failure(UnsupportedOperationException())
 }
 
@@ -56,8 +56,14 @@ interface CenterRepository {
     suspend fun saveTeacherName(id: String?, name: String): Result<TeacherName>
     /** Removes the name from the list; past records keep the name they were saved with. */
     suspend fun removeTeacherName(id: String): Result<Unit>
-    /** Change the general (VIEWER), the ADMIN, or the shared teachers' (TEACHER) password. */
+    /** Change the general (VIEWER) or the ADMIN password. (v3.3: teachers' passwords are per teacher, [saveTeacher].) */
     suspend fun setAccessPassword(target: Role, password: String): Result<Unit>
+
+    /** v3.3: add (id = null) or edit a teacher: name, his circle (null = none), and a new password (null = keep).
+     *  Saving a stopped teacher with a new password turns him back on. */
+    suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member>
+    /** v3.3: stop a teacher: he can't sign in any more and his circle is left without a teacher. His past records stay. */
+    suspend fun removeTeacher(id: String): Result<Unit>
 
     /** v3.1: the teacher's own name picked on this phone (optional); every record then carries it. */
     val recorderName: StateFlow<String?>
@@ -83,7 +89,30 @@ interface CenterRepository {
     suspend fun deleteAnnouncement(id: String): Result<Unit>
     suspend fun markNotificationRead(id: String): Result<Unit>
     suspend fun markAllNotificationsRead(): Result<Unit>
+
+    // v3.2 offline sync: rows still waiting («بانتظار الإرسال»), the waiting/refused counts, and the password-again step.
+    val pendingKeys: StateFlow<Set<String>> get() = NO_KEYS
+    val outboxInfo: StateFlow<OutboxInfo> get() = NO_OUTBOX
+    suspend fun reauthenticate(owner: String, password: String): Result<Int> = Result.failure(UnsupportedOperationException())
+    suspend fun dismissRejected(id: String?) {}
+
+    // v3.4 «عن المركز» (public read; the admin edits; bundled text/photo until he does)
+    val about: StateFlow<AboutPage>
+    suspend fun refreshAbout()
+    suspend fun aboutPhoto(path: String): ByteArray?
+    suspend fun saveAboutText(body: String): Result<Unit>
+    suspend fun addAboutPhoto(jpeg: ByteArray): Result<Unit>
+    suspend fun removeAboutPhoto(path: String): Result<Unit>
+    suspend fun saveAboutButton(b: AboutButton): Result<Unit>
+    suspend fun deleteAboutButton(id: String): Result<Unit>
+    suspend fun moveAboutButton(id: String, up: Boolean): Result<Unit>
 }
+
+data class ReauthTarget(val id: String, val name: String, val role: Role, val waiting: Int)
+data class RejectedChange(val id: String, val label: String, val reason: String)
+data class OutboxInfo(val pending: Int = 0, val needsPasswordFor: List<ReauthTarget> = emptyList(), val rejected: List<RejectedChange> = emptyList(), val lastSyncAt: Long = 0)
+private val NO_KEYS: StateFlow<Set<String>> = kotlinx.coroutines.flow.MutableStateFlow(emptySet())
+private val NO_OUTBOX: StateFlow<OutboxInfo> = kotlinx.coroutines.flow.MutableStateFlow(OutboxInfo())
 
 class PermissionDenied(msg: String = "ليست لديك صلاحية لهذه العملية") : Exception(msg)
 class ValidationError(msg: String) : Exception(msg)

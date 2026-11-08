@@ -144,6 +144,16 @@ class SupabaseApi(private val baseUrl: String, private val publicKey: String) {
         try { http.newCall(req).execute().use { r -> if (r.isSuccessful) r.body?.bytes() else null } } catch (e: IOException) { throw OfflineException() }
     }
 
+    /** v3.4: public reads (the about page) with the public key only, before any password. */
+    suspend fun selectPublic(table: String, query: String): List<JsonObject> =
+        json.parseToJsonElement(ok("GET", "/rest/v1/$table?$query", null)).jsonArray.map { it.jsonObject }
+
+    /** v3.4: a file of a PUBLIC bucket (no login). */
+    suspend fun downloadPublic(bucket: String, path: String): ByteArray? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(baseUrl.trimEnd('/') + "/storage/v1/object/public/$bucket/$path").get().build()
+        try { http.newCall(req).execute().use { r -> if (r.isSuccessful) r.body?.bytes() else null } } catch (e: IOException) { throw OfflineException() }
+    }
+
     suspend fun deleteObject(token: String, bucket: String, path: String) {
         runCatching { exec("DELETE", "/storage/v1/object/$bucket/$path", token) }
     }

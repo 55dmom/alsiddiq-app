@@ -132,7 +132,10 @@ fun StudentRow(s: Student, snap: CenterSnapshot, onClick: () -> Unit, trailing: 
             StudentAvatar(s)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(s.fullName, style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s.fullName, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f, fill = false))
+                    if (isPending(s.id)) { Spacer(Modifier.width(6.dp)); PendingChip() }
+                }
                 Text(
                     (snap.circle(s.circleId)?.name ?: "بدون حلقة") + " • " + Fmt.one(stats.juzEquivalent) + " جزء",
                     style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1
@@ -171,6 +174,7 @@ fun RecordRow(r: Recitation, snap: CenterSnapshot, showStudent: Boolean, onDelet
                 )
                 Text(Fmt.relative(r.recordedAt) + (if (r.mistakes > 0) " • ${r.mistakes} أخطاء" else "") + (snap.recorder(r.byName, r.teacherId)?.let { " • $it" } ?: ""), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                 if (r.notes.isNotBlank()) Text(r.notes, style = MaterialTheme.typography.bodySmall)
+                if (isPending(r.id)) { Spacer(Modifier.height(4.dp)); PendingChip() }
             }
             Column(horizontalAlignment = Alignment.End) {
                 Pill(r.grade.label, gradeColor(r.grade))
@@ -256,20 +260,105 @@ fun SelectorField(label: String, value: String, modifier: Modifier = Modifier, o
     }
 }
 
-/** Demo notice, or — with the central database — how many saved changes are still waiting for a connection. */
+/** v3.3: a teacher looking at another teacher's circle or student (view only). */
+@Composable
+fun ReadOnlyNote(text: String, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Brand.NavySoft).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Visibility, null, tint = Brand.Navy, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.labelMedium, color = Brand.Navy)
+    }
+}
+
+/** v3.2: is this row (a record, student, attendance mark…) still waiting to reach the server? */
+@Composable
+fun isPending(key: String): Boolean = LocalContainer.current.center.pendingKeys.collectAsStateWithLifecycle().value.contains(key) || SyncSim.pendingKeys.contains(key)
+
+/** v3.2: the small «بانتظار الإرسال» chip on a row saved on the phone and not yet on the server. */
+@Composable
+fun PendingChip(modifier: Modifier = Modifier) {
+    Row(modifier.clip(RoundedCornerShape(50)).background(Brand.GoldSoft).padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.CloudUpload, null, tint = Brand.Gold, modifier = Modifier.size(13.dp))
+        Spacer(Modifier.width(4.dp))
+        Text("بانتظار الإرسال", style = MaterialTheme.typography.labelSmall, color = Brand.Ink)
+    }
+}
+
+/** Debug-only (CI screenshots): a simulated outbox, so the status line and chips can be shown in the demo build. */
+object SyncSim {
+    var pending: Int? = null
+    var needsPassword: Boolean = false
+    var pendingKeys: Set<String> = emptySet()
+}
+
+/**
+ * Demo notice, or — with the central database — v3.2's sync status line for whoever writes
+ * («كل شي مرفوع ✅» / «٣ بانتظار الإرسال»), the password-again card when a login ended with
+ * changes waiting, and the changes the server refused (kept, with the reason).
+ */
 @Composable
 fun StatusBanners(modifier: Modifier = Modifier) {
     val container = LocalContainer.current
-    if (container.auth.mode == BackendMode.DEMO) { Box(modifier) { DemoBanner() }; return }
-    val sync = container.center.syncState.collectAsStateWithLifecycle().value
-    if (sync is com.alsiddiq.app.data.SyncState.Pending) {
-        Row(
-            modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Brand.NavySoft).padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Outlined.CloudUpload, null, tint = Brand.Navy, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("${sync.count} تعديل محفوظ على الجهاز وسيُرفع تلقائياً عند توفر الإنترنت", style = MaterialTheme.typography.labelMedium, color = Brand.Navy)
+    val user = container.auth.currentUser.collectAsStateWithLifecycle().value
+    if (container.auth.mode == BackendMode.DEMO) {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            DemoBanner()
+            SyncSim.pending?.let { SyncStatusLine(it, SyncSim.needsPassword, 0) }
+            if (SyncSim.needsPassword) ReauthCard(com.alsiddiq.app.data.ReauthTarget("sim", user?.fullName ?: "المعلم", Role.TEACHER, SyncSim.pending ?: 0)) { _ -> Result.success(0) }
         }
+        return
+    }
+    val info = container.center.outboxInfo.collectAsStateWithLifecycle().value
+    val writer = user != null && user.role != Role.VIEWER
+    if (!writer && info.pending == 0 && info.needsPasswordFor.isEmpty() && info.rejected.isEmpty()) return
+    val scope = rememberCoroutineScope()
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SyncStatusLine(info.pending, info.needsPasswordFor.isNotEmpty(), info.rejected.size)
+        info.needsPasswordFor.forEach { t -> ReauthCard(t) { pw -> container.center.reauthenticate(t.id, pw) } }
+        if (info.rejected.isNotEmpty()) {
+            var open by remember { mutableStateOf(false) }
+            TextButton(onClick = { open = true }) { Text("عرض ما رفضه الخادم (${info.rejected.size})", color = Brand.Red) }
+            if (open) AlertDialog(onDismissRequest = { open = false },
+                title = { Text("تعديلات رفضها الخادم") },
+                text = { Column(Modifier.verticalScroll(rememberScrollState())) { info.rejected.forEach { r ->
+                    Text(r.label, style = MaterialTheme.typography.titleSmall); Text(r.reason, style = MaterialTheme.typography.bodySmall, color = Brand.Muted); Spacer(Modifier.height(8.dp)) } } },
+                confirmButton = { TextButton(onClick = { open = false }) { Text("إغلاق") } },
+                dismissButton = { TextButton(onClick = { scope.launch { container.center.dismissRejected(null) }; open = false }) { Text("مسحها", color = Brand.Red) } })
+        }
+    }
+}
+
+@Composable
+fun SyncStatusLine(pending: Int, needsPassword: Boolean, rejected: Int) {
+    val ok = pending == 0 && !needsPassword
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (ok) Brand.GreenSoft else Brand.NavySoft).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(if (ok) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload, null, tint = if (ok) Brand.Green else Brand.Navy, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(com.alsiddiq.app.domain.SyncPolicy.statusLine(pending, needsPassword, rejected), style = MaterialTheme.typography.labelMedium, color = if (ok) Brand.Green else Brand.Navy, modifier = Modifier.weight(1f))
+        if (!ok && !needsPassword) Text("يُرفع تلقائياً", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+    }
+}
+
+/** v3.2: the login that saved these changes ended — enter its password again; nothing is lost meanwhile. */
+@Composable
+fun ReauthCard(t: com.alsiddiq.app.data.ReauthTarget, onSubmit: suspend (String) -> Result<Int>) {
+    var pw by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var err by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Brand.GoldSoft).padding(12.dp)) {
+        Text("انتهت جلسة ${t.name}", style = MaterialTheme.typography.titleSmall, color = Brand.Ink)
+        Text("${com.alsiddiq.app.domain.SyncPolicy.ar(t.waiting)} تعديل محفوظ على الجهاز بانتظار الإرسال. أدخل كلمة السر لرفعها، ولن يضيع شيء.", style = MaterialTheme.typography.bodySmall, color = Brand.Ink)
+        Spacer(Modifier.height(8.dp))
+        com.alsiddiq.app.ui.auth.PasswordField(pw, { pw = it; err = null }, "كلمة سر ${t.name}")
+        err?.let { Text(it, color = Brand.Red, style = MaterialTheme.typography.bodySmall) }
+        Spacer(Modifier.height(6.dp))
+        Button(enabled = pw.isNotBlank() && !busy, onClick = {
+            busy = true
+            scope.launch { onSubmit(pw).onFailure { err = it.message }.onSuccess { pw = "" }; busy = false }
+        }, shape = RoundedCornerShape(12.dp)) { Text(if (busy) "جارٍ الرفع…" else "أدخل وارفع") }
     }
 }

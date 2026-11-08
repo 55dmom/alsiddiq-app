@@ -26,7 +26,14 @@ data class PendingOp(
     val filter: String = "",
     val onConflict: String = "id",
     val ignoreDuplicates: Boolean = false,
-    val label: String = ""
+    val label: String = "",
+    /** v3.2: the account that made this change (its own login sends it), when it was made on the phone,
+     *  the rows it touches (for «بانتظار الإرسال»), and for a photo the local file waiting to upload. */
+    val owner: String = "",
+    val at: Long = System.currentTimeMillis(),
+    val keys: List<String> = emptyList(),
+    val file: String? = null,
+    val reason: String? = null
 )
 
 @Serializable
@@ -41,8 +48,20 @@ private data class CloudState(
     val cache: CenterSnapshot = CenterSnapshot(),
     val outbox: List<PendingOp> = emptyList(),
     val lastSyncAt: Long = 0,
-    val seenNotificationIds: List<String> = emptyList()
+    val seenNotificationIds: List<String> = emptyList(),
+    /** v3.2: logins kept only to send the changes their owner left waiting (after «خروج» or sign-out). */
+    val held: Map<String, Session> = emptyMap(),
+    val heldMembers: Map<String, Member> = emptyMap(),
+    /** v3.2: owners whose login ended with changes still waiting: ask for the password again, then send. */
+    val needsReauth: List<String> = emptyList(),
+    /** v3.2: changes the server refused (with its reason) — kept, never silently dropped. */
+    val rejected: List<PendingOp> = emptyList(),
+    val superseded: Int = 0
 )
+
+/** v3.2: the login that owns a waiting change has ended; the change stays queued. */
+class NeedsReauth(val owner: String) : Exception("انتهت الجلسة، أدخل كلمة السر مرة ثانية")
+private class Superseded : Exception("superseded")
 
 /**
  * The real backend: central Postgres database (Supabase) with server-side security rules.
@@ -58,6 +77,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     private val syncLock = Mutex()
 
     private var st: CloudState = runCatching { json.decodeFromString(CloudState.serializer(), file.readText()) }.getOrDefault(CloudState())
+        .let { s -> if (s.outbox.any { it.owner.isBlank() }) s.copy(outbox = s.outbox.map { if (it.owner.isBlank()) it.copy(owner = s.me?.id ?: "") else it }) else s }
 
     override val mode = BackendMode.CLOUD
     private val _user = MutableStateFlow(st.me)
@@ -68,21 +88,35 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     override val centerName: StateFlow<String> = _centerName.asStateFlow()
     private val _snapshot = MutableStateFlow(st.cache)
     override val snapshot: StateFlow<CenterSnapshot> = _snapshot.asStateFlow()
-    private val _sync = MutableStateFlow<SyncState>(if (st.outbox.isEmpty()) SyncState.Synced else SyncState.Pending(st.outbox.size))
+    private val _sync = MutableStateFlow<SyncState>(syncOf(st))
     override val syncState: StateFlow<SyncState> = _sync.asStateFlow()
+    private val _pendingKeys = MutableStateFlow(keysOf(st))
+    override val pendingKeys: StateFlow<Set<String>> = _pendingKeys.asStateFlow()
+    private val _outboxInfo = MutableStateFlow(infoOf(st))
+    override val outboxInfo: StateFlow<OutboxInfo> = _outboxInfo.asStateFlow()
+
+    private fun syncOf(s: CloudState): SyncState = if (s.outbox.isEmpty()) SyncState.Synced else SyncState.Pending(s.outbox.size)
+    private fun keysOf(s: CloudState): Set<String> = s.outbox.flatMap { it.keys }.toSet()
+    private fun infoOf(s: CloudState) = OutboxInfo(
+        pending = s.outbox.size,
+        needsPasswordFor = s.needsReauth.mapNotNull { id -> (if (id == s.me?.id) s.me else s.heldMembers[id] ?: s.baseMe?.takeIf { it.id == id }) }
+            .map { ReauthTarget(it.id, it.fullName, it.role, s.outbox.count { op -> op.owner == it.id }) },
+        rejected = s.rejected.map { RejectedChange(it.id, it.label.ifBlank { it.table }, it.reason ?: "") },
+        lastSyncAt = s.lastSyncAt
+    )
 
     init {
         // Sync loop while the app process lives: every 30 s, and immediately when the network comes back.
         scope.launch {
             while (isActive) {
-                if (st.session != null) runCatching { syncNow() }
+                if (st.session != null || st.outbox.isNotEmpty()) runCatching { syncNow() }
                 delay(30_000)
             }
         }
         runCatching {
             val cm = context.getSystemService(ConnectivityManager::class.java)
             cm?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) { scope.launch { if (st.session != null) runCatching { syncNow() } } }
+                override fun onAvailable(network: Network) { scope.launch { if (st.session != null || st.outbox.isNotEmpty()) runCatching { syncNow() } } }
             })
         }
     }
@@ -97,7 +131,9 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         _user.value = st.me
         _base.value = st.baseMe
         if (st.centerName.isNotBlank()) _centerName.value = st.centerName
-        _sync.value = if (st.outbox.isEmpty()) SyncState.Synced else SyncState.Pending(st.outbox.size)
+        _sync.value = syncOf(st)
+        _pendingKeys.value = keysOf(st)
+        _outboxInfo.value = infoOf(st)
     }
 
     /** Arabic-Indic digits typed on an Arabic keyboard count as the same password as Latin digits. */
@@ -108,19 +144,77 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         if (s.expiresAt - System.currentTimeMillis() > 60_000) return s.accessToken
         val fresh = try { api.refresh(s.refreshToken) } catch (e: ApiException) {
             if (e.code in 400..499) {
-                // This login ended on the server (its password was changed or the teacher removed).
-                android.util.Log.i("ALSIDDIQ_SELFTEST", "login ended on the server (refresh ${e.code}) -> dropped, back to " + (if (st.baseSession != null && st.baseSession != s) "the general view" else "the password screen"))
+                // This login ended on the server (its password was changed or the teacher stopped).
+                // v3.2: its waiting changes are NOT dropped: they stay queued until the password is entered again.
+                val me = st.me
+                val waiting = me != null && st.outbox.any { it.owner == me.id }
+                android.util.Log.i("ALSIDDIQ_SELFTEST", "login ended on the server (refresh ${e.code}) -> " + (if (waiting) "changes kept, asking for the password; " else "") + "back to " + (if (st.baseSession != null && st.baseSession != s) "the general view" else "the password screen"))
                 lock.withLock {
+                    val keep = st.copy(
+                        heldMembers = if (waiting && me != null) st.heldMembers + (me.id to me) else st.heldMembers,
+                        held = if (me != null) st.held - me.id else st.held,
+                        needsReauth = if (waiting && me != null) (st.needsReauth + me.id).distinct() else st.needsReauth)
                     st = if (st.baseSession != null && st.baseSession != s)
-                        st.copy(session = st.baseSession, me = st.baseMe, baseSession = null, baseMe = null, cache = CenterSnapshot(center = st.cache.center), outbox = emptyList())
-                    else CloudState(centerName = st.centerName)
+                        keep.copy(session = st.baseSession, me = st.baseMe, baseSession = null, baseMe = null)
+                    else keep.copy(session = null, me = null, baseSession = null, baseMe = null)
                     save(); publish()
                 }
+                if (waiting && me != null) throw NeedsReauth(me.id)
             }
             throw e
         }
-        st = st.copy(session = fresh); save()
+        lock.withLock { st = st.copy(session = fresh); save() }
         return fresh.accessToken
+    }
+
+    /** v3.2: the token of the account that owns a waiting change (the current one, the base, or a held login). */
+    private suspend fun tokenFor(owner: String): String {
+        if (owner in st.needsReauth) throw NeedsReauth(owner)
+        if (owner.isBlank() || owner == st.me?.id) return token()
+        val base = owner == st.baseMe?.id
+        val s = (if (base) st.baseSession else st.held[owner]) ?: throw NeedsReauth(owner)
+        if (s.expiresAt - System.currentTimeMillis() > 60_000) return s.accessToken
+        val fresh = try { api.refresh(s.refreshToken) } catch (e: ApiException) {
+            if (e.code in 400..499) throw NeedsReauth(owner)
+            throw e
+        }
+        lock.withLock { st = if (base) st.copy(baseSession = fresh) else st.copy(held = st.held + (owner to fresh)); save() }
+        return fresh.accessToken
+    }
+
+    private suspend fun markReauth(owner: String) = lock.withLock {
+        val m = if (owner == st.me?.id) st.me else st.heldMembers[owner] ?: st.baseMe?.takeIf { it.id == owner }
+        st = st.copy(needsReauth = (st.needsReauth + owner).distinct(),
+            heldMembers = if (m != null) st.heldMembers + (owner to m) else st.heldMembers)
+        save(); publish()
+    }
+
+    /** v3.2: enter the password again for changes left waiting by [owner]; they are sent right away. */
+    override suspend fun reauthenticate(owner: String, password: String): Result<Int> = runCatching {
+        val m = st.heldMembers[owner] ?: st.me?.takeIf { it.id == owner } ?: throw ValidationError("لا توجد تعديلات بانتظار هذا الحساب")
+        val o = accessCall(buildJsonObject {
+            put("action", "login"); put("password", normPw(password))
+            put("kind", when (m.role) { Role.ADMIN -> "admin"; Role.TEACHER -> "teacher"; else -> "viewer" })
+        })
+        val who = memberFrom(o["profile"]!!.jsonObject)
+        if (who.id != owner) {
+            // Someone else's password: don't send his waiting changes under another account.
+            runCatching { api.signOut(api.sessionOf(o["session"]!!.jsonObject).accessToken) }
+            throw ValidationError("هذي كلمة سر حساب ثاني. أدخل كلمة سر ${m.fullName}")
+        }
+        val s = api.sessionOf(o["session"]!!.jsonObject)
+        lock.withLock {
+            st = if (owner == st.me?.id) st.copy(session = s) else if (owner == st.baseMe?.id) st.copy(baseSession = s) else st.copy(held = st.held + (owner to s))
+            st = st.copy(needsReauth = st.needsReauth - owner); save(); publish()
+        }
+        val before = st.outbox.count { it.owner == owner }
+        runCatching { syncNow() }
+        before - st.outbox.count { it.owner == owner }
+    }
+
+    /** v3.2: the user chose to throw away a change the server refused. */
+    override suspend fun dismissRejected(id: String?) {
+        lock.withLock { st = st.copy(rejected = if (id == null) emptyList() else st.rejected.filterNot { it.id == id }); save(); publish() }
     }
 
     // ---------------- first-time setup ----------------
@@ -152,29 +246,33 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         lock.withLock {
             val base = st.session?.takeIf { keepBase && st.me?.role == Role.VIEWER && me.role != Role.VIEWER }
             val baseMe = st.me?.takeIf { base != null }
-            st = CloudState(session = s, me = me, baseSession = base ?: st.baseSession.takeIf { keepBase }, baseMe = baseMe ?: st.baseMe.takeIf { keepBase },
-                centerName = name, centerId = null, outbox = emptyList())
+            // v3.2: the waiting changes, the logins kept to send them and the cache all survive a new sign-in.
+            val leaving = st.me?.takeIf { it.id != me.id && it.id != baseMe?.id && st.outbox.any { op -> op.owner == it.id } }
+            val held0 = if (leaving != null && st.session != null) st.held + (leaving.id to st.session!!) else st.held
+            val heldM0 = if (leaving != null) st.heldMembers + (leaving.id to leaving) else st.heldMembers
+            st = st.copy(session = s, me = me, baseSession = base ?: st.baseSession.takeIf { keepBase }, baseMe = baseMe ?: st.baseMe.takeIf { keepBase },
+                centerName = name, centerId = st.centerId,
+                held = held0 - me.id, heldMembers = heldM0 - me.id, needsReauth = st.needsReauth - me.id)
             if (me.role == Role.VIEWER) st = st.copy(baseSession = null, baseMe = null)
             save()
         }
         _centerName.value = name
         val center = runCatching { api.selectAll(s.accessToken, "centers", "select=id&limit=1").firstOrNull()?.get("id")?.jsonPrimitive?.contentOrNull }.getOrNull()
-        lock.withLock { st = st.copy(centerId = center); save() }
-        runCatching { reload() }
+        lock.withLock { st = st.copy(centerId = center ?: st.centerId); save() }
+        runCatching { syncNow() }
         // Don't raise phone notifications for what was already waiting before this sign-in.
         lock.withLock { st = st.copy(seenNotificationIds = st.cache.notifications.map { it.id }); save() }
         publish()
         return st.me ?: me
     }
 
-    override suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String, teachersPassword: String): Result<Member> = runCatching {
-        val a = normPw(adminPassword); val v = normPw(viewerPassword); val t = normPw(teachersPassword)
-        if (a.length < 6 || v.length < 6 || t.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
+    override suspend fun setup(centerName: String, adminPassword: String, viewerPassword: String): Result<Member> = runCatching {
+        // v3.3: admin + general passwords only; each teacher gets his own password from the admin later.
+        val a = normPw(adminPassword); val v = normPw(viewerPassword)
+        if (a.length < 6 || v.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
         if (a == v) throw ValidationError("كلمة سر الإدارة يجب أن تختلف عن كلمة السر العامة")
-        if (t == a || t == v) throw ValidationError("كلمة سر المعلمين يجب أن تختلف عن كلمة سر الإدارة والكلمة العامة")
         val o = accessCall(buildJsonObject {
             put("action", "setup"); put("center_name", centerName.trim()); put("admin_password", a); put("viewer_password", v)
-            put("teachers_password", t)
         })
         adopt(o, keepBase = false)
     }
@@ -191,20 +289,35 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
 
     override suspend fun leaveRole() {
         val t = st.session?.accessToken
+        var keepLogin = false
         lock.withLock {
-            st = if (st.baseSession != null) st.copy(session = st.baseSession, me = st.baseMe, baseSession = null, baseMe = null,
-                cache = CenterSnapshot(center = st.cache.center), outbox = emptyList())
-            else CloudState(centerName = st.centerName)
+            val me = st.me; val s = st.session
+            // v3.2: changes still waiting keep their owner's login (until sent), so «خروج» never loses them.
+            keepLogin = me != null && s != null && st.outbox.any { it.owner == me.id }
+            val held = if (keepLogin) st.held + (me!!.id to s!!) else st.held
+            val heldM = if (keepLogin) st.heldMembers + (me!!.id to me) else st.heldMembers
+            st = if (st.baseSession != null) st.copy(session = st.baseSession, me = st.baseMe, baseSession = null, baseMe = null, held = held, heldMembers = heldM)
+            else st.copy(session = null, me = null, baseSession = null, baseMe = null, held = held, heldMembers = heldM)
             save(); publish()
         }
-        if (t != null) scope.launch { api.signOut(t) }
-        if (st.session != null) scope.launch { runCatching { syncNow() } }
+        if (t != null && !keepLogin) scope.launch { api.signOut(t) }
+        if (st.session != null || st.outbox.isNotEmpty()) scope.launch { runCatching { syncNow() } }
     }
 
     override suspend fun signOut() {
-        val ts = listOfNotNull(st.session?.accessToken, st.baseSession?.accessToken)
-        lock.withLock { st = CloudState(centerName = st.centerName); save(); publish() }
-        ts.forEach { t -> scope.launch { api.signOut(t) } }
+        val toEnd = mutableListOf<String>()
+        lock.withLock {
+            var held = st.held; var heldM = st.heldMembers
+            listOfNotNull(st.me?.let { it to st.session }, st.baseMe?.let { it to st.baseSession }).forEach { (m, s) ->
+                if (s == null) return@forEach
+                if (st.outbox.any { it.owner == m.id }) { held = held + (m.id to s); heldM = heldM + (m.id to m) } else toEnd += s.accessToken
+            }
+            // v3.2: signing out keeps the waiting changes (sent by their own login in the background) and the offline copy.
+            st = CloudState(centerName = st.centerName, centerId = st.centerId, cache = st.cache, outbox = st.outbox, held = held, heldMembers = heldM,
+                needsReauth = st.needsReauth, rejected = st.rejected, superseded = st.superseded, lastSyncAt = st.lastSyncAt)
+            save(); publish()
+        }
+        toEnd.forEach { t -> scope.launch { api.signOut(t) } }
     }
 
     // ---------------- sync ----------------
@@ -212,8 +325,15 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
 
     private suspend fun syncNow() = syncLock.withLock {
         flushOutbox()
-        reload()
+        if (st.session != null) reload()
     }
+
+    /** v3.2: called by the background sync worker (network constraint) and on app open. */
+    suspend fun backgroundSync(): Boolean {
+        if (st.session == null && st.outbox.isEmpty()) return true
+        return try { syncNow(); true } catch (e: OfflineException) { false } catch (e: ApiException) { e.code !in 500..599 }
+    }
+    fun hasWaiting() = st.outbox.isNotEmpty()
 
     /** Pull everything this account may see. RLS on the server decides what that is. */
     private suspend fun reload() {
@@ -260,78 +380,157 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         }
     }
 
+    /** Changes still waiting stay on screen (with «بانتظار الإرسال») over what the server sent. */
     private fun overlayPending(fresh: CenterSnapshot): CenterSnapshot {
-        val pendingIds = st.outbox.mapNotNull { op -> runCatching { json.parseToJsonElement(op.body).jsonObject["id"]?.jsonPrimitive?.contentOrNull }.getOrNull() }.toSet()
+        val keys = st.outbox.flatMap { it.keys }.toSet() + st.outbox.mapNotNull { op -> runCatching { json.parseToJsonElement(op.body).jsonObject["id"]?.jsonPrimitive?.contentOrNull }.getOrNull() }
         val old = st.cache
+        fun <T> over(freshL: List<T>, oldL: List<T>, id: (T) -> String): List<T> {
+            val mine = oldL.filter { id(it) in keys }.associateBy(id)
+            return freshL.map { mine[id(it)] ?: it } + mine.values.filter { m -> freshL.none { id(it) == id(m) } }
+        }
+        val deleted = st.outbox.filter { it.type == "delete" }.mapNotNull { Regex("id=eq\\.([^&]+)").find(it.filter)?.groupValues?.get(1) }.toSet()
         return fresh.copy(
-            recitations = fresh.recitations + old.recitations.filter { it.id in pendingIds && fresh.recitations.none { f -> f.id == it.id } },
-            rewards = fresh.rewards + old.rewards.filter { it.id in pendingIds && fresh.rewards.none { f -> f.id == it.id } },
-            students = fresh.students + old.students.filter { it.id in pendingIds && fresh.students.none { f -> f.id == it.id } },
-            circles = fresh.circles + old.circles.filter { it.id in pendingIds && fresh.circles.none { f -> f.id == it.id } }
+            recitations = over(fresh.recitations, old.recitations) { it.id }.filterNot { it.id in deleted },
+            rewards = over(fresh.rewards, old.rewards) { it.id }.filterNot { it.id in deleted },
+            students = over(fresh.students, old.students) { it.id }.filterNot { it.id in deleted },
+            circles = over(fresh.circles, old.circles) { it.id }.filterNot { it.id in deleted },
+            announcements = over(fresh.announcements, old.announcements) { it.id }.filterNot { it.id in deleted },
+            attendance = over(fresh.attendance, old.attendance) { SyncPolicy.attendanceKey(it.studentId, it.day) }
         )
     }
 
+    /**
+     * v3.2: send every waiting change, oldest first, each with its own owner's login.
+     * Sent / already there -> done. No network or server busy -> stop, try later. Login ended -> keep, ask
+     * for the password. Refused by the rules -> kept aside with the reason (never silently dropped).
+     */
     private suspend fun flushOutbox() {
+        val blocked = mutableSetOf<String>()
         while (true) {
-            val op = st.outbox.firstOrNull() ?: return
+            val op = st.outbox.firstOrNull { it.owner !in blocked && it.owner !in st.needsReauth } ?: break
             try {
-                send(op)
+                send(op); done(op)
             } catch (e: OfflineException) {
                 throw e
+            } catch (e: NeedsReauth) {
+                blocked += e.owner; markReauth(e.owner)
+            } catch (e: Superseded) {
+                done(op, superseded = true)
+            } catch (e: PermissionDenied) {
+                blocked += op.owner; markReauth(op.owner)
             } catch (e: ApiException) {
-                if (e.code >= 500) throw e
-                // The server refused it (rules or data): drop it so the queue never jams.
+                when (SyncPolicy.classify(e.code)) {
+                    SyncPolicy.Outcome.SENT -> done(op)
+                    SyncPolicy.Outcome.RETRY -> throw e
+                    SyncPolicy.Outcome.REAUTH -> { blocked += op.owner; markReauth(op.owner) }
+                    SyncPolicy.Outcome.REJECTED -> lock.withLock {
+                        android.util.Log.i("ALSIDDIQ_SELFTEST", "sync: server refused ${op.table} (${e.code}) -> kept as rejected")
+                        st = st.copy(outbox = st.outbox.filterNot { it.id == op.id }, rejected = st.rejected + op.copy(reason = e.message)); save(); publish()
+                    }
+                }
             }
-            lock.withLock { st = st.copy(outbox = st.outbox.filterNot { it.id == op.id }); save(); publish() }
         }
+        releaseIdleLogins()
+    }
+
+    private suspend fun done(op: PendingOp, superseded: Boolean = false) = lock.withLock {
+        if (superseded) android.util.Log.i("ALSIDDIQ_SELFTEST", "sync: ${op.table} newer on the server -> last write wins, ours skipped")
+        st = st.copy(outbox = st.outbox.filterNot { it.id == op.id }, superseded = st.superseded + if (superseded) 1 else 0); save(); publish()
+        op.file?.let { runCatching { File(it).delete() } }
+    }
+
+    /** Logins kept only for waiting changes are ended once those are sent. */
+    private suspend fun releaseIdleLogins() {
+        val idle = st.held.filterKeys { id -> st.outbox.none { it.owner == id } }
+        if (idle.isEmpty() && st.heldMembers.keys.none { id -> st.outbox.none { it.owner == id } }) return
+        lock.withLock {
+            st = st.copy(held = st.held - idle.keys,
+                heldMembers = st.heldMembers.filterKeys { id -> st.outbox.any { it.owner == id } },
+                needsReauth = st.needsReauth.filter { id -> st.outbox.any { it.owner == id } })
+            save(); publish()
+        }
+        idle.values.forEach { s -> scope.launch { api.signOut(s.accessToken) } }
     }
 
     private suspend fun send(op: PendingOp) {
-        val t = token()
+        val t = tokenFor(op.owner)
         when (op.type) {
-            "upsert" -> api.upsert(t, op.table, json.parseToJsonElement(op.body), op.onConflict, op.ignoreDuplicates)
+            "upsert" -> {
+                val body = lww(t, op) ?: throw Superseded()
+                api.upsert(t, op.table, body, op.onConflict, op.ignoreDuplicates)
+            }
             "patch" -> api.patch(t, op.table, op.filter, json.parseToJsonElement(op.body))
             "delete" -> api.delete(t, op.table, op.filter)
+            "photo" -> {
+                val o = json.parseToJsonElement(op.body).jsonObject
+                val sid = o["student_id"]!!.jsonPrimitive.content
+                val path = o["path"]?.jsonPrimitive?.contentOrNull
+                val old = o["old"]?.jsonPrimitive?.contentOrNull
+                if (path != null) {
+                    val bytes = op.file?.let { f -> File(f).takeIf { it.exists() }?.readBytes() } ?: photoFile(path).takeIf { it.exists() }?.readBytes()
+                    if (bytes != null) api.uploadObject(t, "student-photos", path, bytes)
+                }
+                api.patch(t, "students", "id=eq.$sid", buildJsonObject { put("photo_path", path); put("updated_at", Rows.iso(op.at)) })
+                if (old != null && old != path) runCatching { api.deleteObject(t, "student-photos", old) }
+            }
         }
     }
 
     /**
-     * Apply a change on screen, queue it, and try to send it now.
-     * Online and refused by the server -> the change is undone and the reason returned.
-     * Offline -> kept in the queue and sent automatically later.
+     * v3.2 last-write-wins by the time the change was made on the phone: a student edit or an attendance
+     * mark is sent only if the server doesn't already hold a LATER change of the same row. Null = nothing left to send.
      */
-    private suspend fun <T> write(op: PendingOp, value: T, local: (CenterSnapshot) -> CenterSnapshot): Result<T> {
-        lock.withLock {
-            st = st.copy(cache = local(st.cache), outbox = st.outbox + op); save(); publish()
-        }
-        return try {
-            syncLock.withLock {
-                // Send everything queued before this one too, in order.
-                flushOutboxStrict(op.id)
+    private suspend fun lww(t: String, op: PendingOp): JsonElement? {
+        val body = json.parseToJsonElement(op.body)
+        return when (op.table) {
+            "students" -> {
+                val id = body.jsonObject["id"]?.jsonPrimitive?.contentOrNull ?: return body
+                val server = runCatching { api.selectAll(t, "students", "select=updated_at&id=eq.$id").firstOrNull()?.get("updated_at")?.jsonPrimitive?.contentOrNull }.getOrNull()
+                if (SyncPolicy.shouldSend(op.at, server?.let { Rows.ts(it) })) body else null
             }
-            scope.launch { runCatching { syncNow() } }
-            Result.success(value)
-        } catch (e: OfflineException) {
-            Result.success(value)
-        } catch (e: ApiException) {
-            lock.withLock { st = st.copy(outbox = st.outbox.filterNot { it.id == op.id }); save() }
-            runCatching { syncNow() }
-            publish()
-            Result.failure(e)
+            "attendance" -> {
+                val rows = (body as? JsonArray) ?: return body
+                val day = rows.firstOrNull()?.jsonObject?.get("day")?.jsonPrimitive?.contentOrNull ?: return body
+                val ids = rows.mapNotNull { it.jsonObject["student_id"]?.jsonPrimitive?.contentOrNull }
+                val server = runCatching {
+                    api.selectAll(t, "attendance", "select=student_id,recorded_at&day=eq.$day&student_id=in.(${ids.joinToString(",")})")
+                        .associate { it["student_id"]!!.jsonPrimitive.content to Rows.ts(it["recorded_at"]?.jsonPrimitive?.contentOrNull) }
+                }.getOrDefault(emptyMap())
+                val keep = rows.filter { r ->
+                    val sid = r.jsonObject["student_id"]?.jsonPrimitive?.contentOrNull
+                    SyncPolicy.shouldSend(op.at, server[sid]?.takeIf { it > 0 })
+                }
+                if (keep.isEmpty()) null else JsonArray(keep)
+            }
+            else -> body
         }
     }
 
-    private suspend fun flushOutboxStrict(targetId: String) {
-        while (true) {
-            val op = st.outbox.firstOrNull() ?: return
-            if (op.id == targetId) {
-                send(op) // let its ApiException reach the caller
-                lock.withLock { st = st.copy(outbox = st.outbox.filterNot { it.id == op.id }); save(); publish() }
-                return
-            }
-            try { send(op) } catch (e: ApiException) { if (e.code >= 500) throw e }
-            lock.withLock { st = st.copy(outbox = st.outbox.filterNot { it.id == op.id }); save(); publish() }
+    /**
+     * Apply a change on screen, queue it (with its owner, time and rows), and try to send it now.
+     * Online and refused by the rules -> the change is undone and the reason returned.
+     * Offline, server busy, or the login needs the password again -> kept and sent automatically later.
+     */
+    private suspend fun <T> write(op0: PendingOp, value: T, local: (CenterSnapshot) -> CenterSnapshot): Result<T> {
+        val op = op0.copy(owner = st.me?.id ?: op0.owner)
+        val before = st.cache
+        lock.withLock {
+            st = st.copy(cache = local(st.cache), outbox = st.outbox + op); save(); publish()
         }
+        try {
+            syncLock.withLock { flushOutbox() }
+        } catch (_: Exception) { /* offline / busy: stays queued */ }
+        val refused = st.rejected.firstOrNull { it.id == op.id }
+        if (refused != null) {
+            // Refused right now, in front of the user: undo it on screen and say why (nothing waits silently).
+            lock.withLock { st = st.copy(rejected = st.rejected.filterNot { it.id == op.id }, cache = if (st.outbox.isEmpty()) before else st.cache); save() }
+            runCatching { syncNow() }
+            publish()
+            return Result.failure(ApiException(403, refused.reason ?: "رفض الخادم هذا التعديل"))
+        }
+        if (st.outbox.none { it.id == op.id }) scope.launch { runCatching { syncNow() } }
+        else runCatching { com.alsiddiq.app.notify.SyncWorker.kick(context) }   // still waiting: WorkManager sends it when online
+        return Result.success(value)
     }
 
     private fun me(): Member = st.me ?: throw PermissionDenied("سجّل الدخول أولاً")
@@ -376,7 +575,8 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val n = name?.trim()?.takeIf { it.isNotEmpty() }
         prefs.edit().putString("recorder_name", n).apply(); _recorder.value = n
     }
-    private fun byName(): String? = if (st.me?.role == Role.TEACHER) _recorder.value else null
+    /** v3.3: a teacher records under his own account, so his own name goes on the record. */
+    private fun byName(): String? = st.me?.takeIf { it.role == Role.TEACHER && !it.allCircles }?.fullName
 
     // ---------------- v3.1: student photos (private bucket) ----------------
     private val photoDir = File(context.filesDir, "photos").apply { mkdirs() }
@@ -386,16 +586,15 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val u = me(); val d = st.cache
         val s = d.student(studentId) ?: throw ValidationError("الطالب غير موجود")
         require(Permissions.canEditStudent(u, s, d))
-        val t = try { token() } catch (e: OfflineException) { throw ValidationError("الصورة تحتاج اتصالاً بالإنترنت") }
         val old = s.photoPath
         val path = if (jpeg != null) "${center()}/$studentId/${UUID.randomUUID().toString().take(8)}.jpg" else null
-        try {
-            if (jpeg != null && path != null) { api.uploadObject(t, "student-photos", path, jpeg); photoFile(path).writeBytes(jpeg) }
-            api.patch(t, "students", "id=eq.$studentId", buildJsonObject { put("photo_path", path); put("updated_at", Rows.iso(System.currentTimeMillis())) })
-        } catch (e: OfflineException) { throw ValidationError("الصورة تحتاج اتصالاً بالإنترنت") }
-        if (old != null && old != path) { api.deleteObject(t, "student-photos", old); runCatching { photoFile(old).delete() } }
-        lock.withLock { st = st.copy(cache = st.cache.copy(students = st.cache.students.map { if (it.id == studentId) it.copy(photoPath = path) else it })); save(); publish() }
-        Result.success(Unit)
+        // v3.2: the photo is kept on the phone and shown at once; it uploads with the other waiting changes.
+        val local = if (jpeg != null && path != null) photoFile(path).also { it.writeBytes(jpeg) } else null
+        val body = buildJsonObject { put("student_id", studentId); put("path", path); put("old", old) }
+        write(PendingOp(type = "photo", table = "student-photos", body = body.toString(), keys = listOf(studentId, "photo:$studentId"),
+            label = "صورة ${s.fullName}", file = null), Unit) { snap ->
+            snap.copy(students = snap.students.map { if (it.id == studentId) it.copy(photoPath = path) else it })
+        }.also { r -> if (r.isFailure) local?.delete() }
     }
 
     override suspend fun studentPhoto(path: String): ByteArray? {
@@ -410,7 +609,48 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         require(Permissions.canManageMembers(me()))
         val pw = normPw(password)
         if (pw.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
-        adminFunction(buildJsonObject { put("action", "set_password"); put("target", when (target) { Role.ADMIN -> "admin"; Role.TEACHER -> "teachers"; else -> "viewer" }); put("password", pw) })
+        // v3.3: there is no shared teachers' password any more; teachers' passwords are set per teacher.
+        if (target == Role.TEACHER) throw ValidationError("كلمة سر كل معلم من صفحة المعلم في «المعلمون»")
+        adminFunction(buildJsonObject { put("action", "set_password"); put("target", if (target == Role.ADMIN) "admin" else "viewer"); put("password", pw) })
+        Result.success(Unit)
+    }
+
+    // ---------------- v3.3: per-teacher accounts (admin only, online) ----------------
+    override suspend fun saveTeacher(id: String?, name: String, circleId: String?, password: String?): Result<Member> = guarded {
+        require(Permissions.canManageMembers(me()))
+        if (name.isBlank()) throw ValidationError("اكتب اسم المعلم")
+        val pw = password?.let { normPw(it) }?.takeIf { it.isNotEmpty() }
+        if (id == null && pw == null) throw ValidationError("اختر كلمة سر للمعلم")
+        if (pw != null && pw.length < 6) throw ValidationError("كلمة السر 6 أحرف أو أرقام على الأقل")
+        val existing = st.cache.member(id)
+        if (existing != null && !existing.active && pw == null) throw ValidationError("المعلم موقوف: اختر له كلمة سر جديدة لتشغيله")
+        val o = adminFunction(buildJsonObject {
+            put("action", "teacher_save"); if (id != null) put("id", id); put("name", name.trim())
+            put("circle_id", circleId ?: ""); if (pw != null) put("password", pw)
+        })
+        val saved = memberFrom(o["profile"]!!.jsonObject).copy(active = true)
+        lock.withLock {
+            val d = st.cache
+            val members = if (d.members.any { it.id == saved.id }) d.members.map { if (it.id == saved.id) saved else it } else d.members + saved
+            val circles = d.circles.map { c -> when {
+                c.id == circleId -> c.copy(teacherId = saved.id, teacherName = saved.fullName)
+                c.teacherId == saved.id -> c.copy(teacherId = null, teacherName = null)
+                else -> c } }
+            st = st.copy(cache = d.copy(members = members, circles = circles)); save(); publish()
+        }
+        runCatching { syncNow() }
+        Result.success(saved)
+    }
+
+    override suspend fun removeTeacher(id: String): Result<Unit> = guarded {
+        require(Permissions.canManageMembers(me()))
+        adminFunction(buildJsonObject { put("action", "teacher_remove"); put("id", id) })
+        lock.withLock {
+            val d = st.cache
+            st = st.copy(cache = d.copy(members = d.members.map { if (it.id == id) it.copy(active = false) else it },
+                circles = d.circles.map { if (it.teacherId == id) it.copy(teacherId = null, teacherName = null) else it })); save(); publish()
+        }
+        runCatching { syncNow() }
         Result.success(Unit)
     }
 
@@ -434,7 +674,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         require(Permissions.canManageCircles(me()))
         if (c.name.isBlank()) throw ValidationError("اكتب اسم الحلقة")
         val saved = if (c.id.isBlank()) c.copy(id = newId()) else c
-        write(PendingOp(type = "upsert", table = "circles", body = Rows.circleRow(saved, center()).toString()), saved) { d ->
+        write(PendingOp(type = "upsert", table = "circles", body = Rows.circleRow(saved, center()).toString(), keys = listOf(saved.id), label = "حلقة: ${saved.name}"), saved) { d ->
             d.copy(circles = if (d.circles.any { it.id == saved.id }) d.circles.map { if (it.id == saved.id) saved else it } else d.circles + saved)
         }
     }
@@ -452,7 +692,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
                 else Permissions.canEditStudent(me(), existing, st.cache) && Permissions.canAddStudentTo(me(), s.circleId, st.cache))
         if (s.fullName.isBlank()) throw ValidationError("اكتب اسم الطالب")
         val saved = if (s.id.isBlank()) s.copy(id = newId()) else s
-        write(PendingOp(type = "upsert", table = "students", body = Rows.studentRow(saved, center()).toString()), saved) { d ->
+        write(PendingOp(type = "upsert", table = "students", body = Rows.studentRow(saved, center()).toString(), keys = listOf(saved.id), label = "الطالب ${saved.fullName}"), saved) { d ->
             d.copy(students = if (d.students.any { it.id == saved.id }) d.students.map { if (it.id == saved.id) saved else it } else d.students + saved)
         }
     }
@@ -473,7 +713,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         if (!com.alsiddiq.app.core.Quran.isValid(r.fromSurah, r.fromAyah) || !com.alsiddiq.app.core.Quran.isValid(r.toSurah, r.toAyah)) throw ValidationError("رقم الآية غير صحيح")
         if (com.alsiddiq.app.core.Quran.ayatBetween(r.fromSurah, r.fromAyah, r.toSurah, r.toAyah) <= 0) throw ValidationError("نهاية المقطع قبل بدايته")
         val saved = r.copy(id = r.id.ifBlank { newId() }, teacherId = u.id, circleId = student.circleId, byName = r.byName ?: byName())
-        write(PendingOp(type = "upsert", table = "recitations", ignoreDuplicates = true, body = Rows.recitationRow(saved, center()).toString()), saved) {
+        write(PendingOp(type = "upsert", table = "recitations", ignoreDuplicates = true, body = Rows.recitationRow(saved, center()).toString(), keys = listOf(saved.id, saved.studentId), label = "تسميع ${student.fullName}"), saved) {
             it.copy(recitations = listOf(saved) + it.recitations)
         }
     }
@@ -493,7 +733,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
                 put("by_name", byName())
             } }
         }
-        write(PendingOp(type = "upsert", table = "attendance", onConflict = "student_id,day", body = rows.toString()), marks.size) { snap ->
+        write(PendingOp(type = "upsert", table = "attendance", onConflict = "student_id,day", body = rows.toString(), keys = marks.keys.map { SyncPolicy.attendanceKey(it, day) } + "att:$circleId:$day", label = "حضور ${circle.name} $day"), marks.size) { snap ->
             val kept = snap.attendance.filterNot { it.day == day && it.studentId in marks.keys }
             snap.copy(attendance = kept + marks.map { (sid, s) -> Attendance(newId(), sid, circleId, day, s, u.id, byName = byName()) })
         }
@@ -505,7 +745,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         require(Permissions.canRecordFor(u, student, d))
         if (r.points == 0) throw ValidationError("حدّد عدد النقاط")
         val saved = r.copy(id = r.id.ifBlank { newId() }, awardedBy = u.id, byName = r.byName ?: byName())
-        write(PendingOp(type = "upsert", table = "rewards", ignoreDuplicates = true, body = Rows.rewardRow(saved, center()).toString()), saved) {
+        write(PendingOp(type = "upsert", table = "rewards", ignoreDuplicates = true, body = Rows.rewardRow(saved, center()).toString(), keys = listOf(saved.id), label = "مكافأة ${student.fullName}"), saved) {
             it.copy(rewards = listOf(saved) + it.rewards)
         }
     }
@@ -516,7 +756,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         require(Permissions.canPostAnnouncement(u))
         if (a.title.isBlank()) throw ValidationError("اكتب عنوان الإعلان")
         val saved = a.copy(id = a.id.ifBlank { newId() }, createdBy = u.id, byName = a.byName ?: byName())
-        write(PendingOp(type = "upsert", table = "announcements", ignoreDuplicates = true, body = Rows.announcementRow(saved, center()).toString()), saved) {
+        write(PendingOp(type = "upsert", table = "announcements", ignoreDuplicates = true, body = Rows.announcementRow(saved, center()).toString(), keys = listOf(saved.id), label = "إعلان: ${saved.title}"), saved) {
             it.copy(announcements = listOf(saved) + it.announcements)
         }
     }
@@ -549,6 +789,92 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val fresh = rows.filter { it.id !in seen }
         lock.withLock { st = st.copy(seenNotificationIds = (rows.map { it.id } + st.seenNotificationIds).distinct().take(500)); save() }
         return fresh
+    }
+
+    // ---------------- v3.4 «عن المركز» (public read with the public key; admin writes, online) ----------------
+    private val aboutLocal = AboutLocal(context)
+    override val about: StateFlow<AboutPage> = aboutLocal.flow.asStateFlow()
+
+    override suspend fun refreshAbout() {
+        runCatching {
+            val row = api.selectPublic("centre_about", "select=*&limit=1").firstOrNull()
+            val btns = runCatching { api.selectPublic("centre_about_buttons", "select=*&order=sort") }.getOrDefault(emptyList())
+            val photos = row?.get("photos")?.let { el -> runCatching { el.jsonArray.mapNotNull { it.jsonPrimitive.contentOrNull } }.getOrNull() }
+            aboutLocal.set(AboutPage(
+                body = row?.get("body")?.jsonPrimitive?.contentOrNull,
+                photos = if (row == null) listOf(AboutPage.BUNDLED_PHOTO) else photos ?: emptyList(),
+                buttons = AboutLocal.sorted(btns.map { b -> AboutButton(b["id"]!!.jsonPrimitive.content, b["label"]?.jsonPrimitive?.contentOrNull ?: "",
+                    b["kind"]?.jsonPrimitive?.contentOrNull ?: "link", b["value"]?.jsonPrimitive?.contentOrNull ?: "", b["sort"]?.jsonPrimitive?.intOrNull ?: 0) }),
+                updatedAt = Rows.ts(row?.get("updated_at")?.jsonPrimitive?.contentOrNull), fromServer = true))
+        }.onFailure { android.util.Log.i("ALSIDDIQ_SELFTEST", "about: offline/unavailable -> showing the saved copy (${it.message})") }
+    }
+
+    override suspend fun aboutPhoto(path: String): ByteArray? {
+        aboutLocal.cached(path)?.let { return it }
+        val bytes = runCatching { api.downloadPublic("center-about", path) }.getOrNull() ?: return null
+        aboutLocal.cache(path, bytes); return bytes
+    }
+
+    private suspend fun adminToken(): String {
+        require(Permissions.canManageCenter(me()))
+        return try { token() } catch (e: OfflineException) { throw ValidationError("تعديل «عن المركز» يحتاج اتصالاً بالإنترنت") }
+    }
+    private suspend fun <T> online(block: suspend () -> T): T = try { block() } catch (e: OfflineException) { throw ValidationError("تعديل «عن المركز» يحتاج اتصالاً بالإنترنت") }
+
+    private suspend fun putAbout(t: String, body: String, photos: List<String>) = online {
+        val now = System.currentTimeMillis()
+        api.upsert(t, "centre_about", buildJsonObject {
+            put("center_id", center()); put("body", body); put("photos", JsonArray(photos.map { JsonPrimitive(it) })); put("updated_at", Rows.iso(now))
+        }, "center_id")
+        aboutLocal.set(aboutLocal.page.copy(body = body, photos = photos, updatedAt = now))
+    }
+
+    override suspend fun saveAboutText(body: String): Result<Unit> = guarded {
+        val t = adminToken()
+        putAbout(t, body.trim(), aboutLocal.page.photos); Result.success(Unit)
+    }
+
+    override suspend fun addAboutPhoto(jpeg: ByteArray): Result<Unit> = guarded {
+        val t = adminToken()
+        val path = "${center()}/${UUID.randomUUID().toString().take(8)}.jpg"
+        online { api.uploadObject(t, "center-about", path, jpeg) }
+        aboutLocal.cache(path, jpeg)
+        putAbout(t, aboutLocal.currentText(), aboutLocal.page.photos + path); Result.success(Unit)
+    }
+
+    override suspend fun removeAboutPhoto(path: String): Result<Unit> = guarded {
+        val t = adminToken()
+        putAbout(t, aboutLocal.currentText(), aboutLocal.page.photos - path)
+        if (!path.startsWith("bundled:")) { runCatching { api.deleteObject(t, "center-about", path) }; aboutLocal.forget(path) }
+        Result.success(Unit)
+    }
+
+    override suspend fun saveAboutButton(b: AboutButton): Result<Unit> = guarded {
+        val t = adminToken()
+        if (b.label.isBlank() || b.value.isBlank()) throw ValidationError("اكتب اسم الزر وقيمته")
+        val list = aboutLocal.page.buttons
+        val saved = if (b.id.isBlank()) b.copy(id = newId(), sort = (list.maxOfOrNull { it.sort } ?: -1) + 1) else b
+        online { api.upsert(t, "centre_about_buttons", buildJsonObject {
+            put("id", saved.id); put("center_id", center()); put("label", saved.label.trim()); put("kind", saved.kind); put("value", saved.value.trim()); put("sort", saved.sort)
+        }, "id") }
+        aboutLocal.set(aboutLocal.page.copy(buttons = AboutLocal.sorted(list.filterNot { it.id == saved.id } + saved)))
+        Result.success(Unit)
+    }
+
+    override suspend fun deleteAboutButton(id: String): Result<Unit> = guarded {
+        val t = adminToken()
+        online { api.delete(t, "centre_about_buttons", "id=eq.$id") }
+        aboutLocal.set(aboutLocal.page.copy(buttons = aboutLocal.page.buttons.filterNot { it.id == id }))
+        Result.success(Unit)
+    }
+
+    override suspend fun moveAboutButton(id: String, up: Boolean): Result<Unit> = guarded {
+        val t = adminToken()
+        val moved = AboutLocal.move(aboutLocal.page.buttons, id, up)
+        online { moved.forEach { b -> if (aboutLocal.page.buttons.firstOrNull { it.id == b.id }?.sort != b.sort)
+            api.patch(t, "centre_about_buttons", "id=eq.${b.id}", buildJsonObject { put("sort", b.sort) }) } }
+        aboutLocal.set(aboutLocal.page.copy(buttons = moved))
+        Result.success(Unit)
     }
 
     fun isSignedIn() = st.session != null

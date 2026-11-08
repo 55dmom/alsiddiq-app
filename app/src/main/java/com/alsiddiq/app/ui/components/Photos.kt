@@ -131,6 +131,7 @@ fun StudentPhotoCard(s: Student, canEdit: Boolean) {
             Column(Modifier.weight(1f)) {
                 Text(s.fullName, style = MaterialTheme.typography.titleMedium, color = Brand.Navy)
                 Text(if (s.photoPath != null) "صورة الطالب" else "لا توجد صورة", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                if (com.alsiddiq.app.ui.screens.isPending("photo:${s.id}")) { Spacer(Modifier.height(4.dp)); com.alsiddiq.app.ui.screens.PendingChip() }
                 if (canEdit) {
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

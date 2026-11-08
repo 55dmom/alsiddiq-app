@@ -53,15 +53,16 @@ import kotlinx.coroutines.launch
 fun TeacherHome(user: Member, nav: NavHostController) {
     val snap = snapshot()
     val demo = isDemo()
-    val circles = Permissions.visibleCircles(user, snap)
-    val students = Permissions.visibleStudents(user, snap)
+    // v3.3: home shows HIS circle(s); every other circle is under «الحلقات» (view only).
+    val circles = Permissions.ownCircles(user, snap)
+    val students = Permissions.ownStudents(user, snap)
     val stats = remember(snap) { Stats.forCenter(snap, students) }
     val today = LocalDate.now()
     val logged = snap.recitations.filter { Stats.dayOf(it.recordedAt) == today }.map { it.studentId }.toSet()
     val pending = students.filter { it.id !in logged }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            HomeHeader("السلام عليكم", LocalContainer.current.center.recorderName.collectAsStateWithLifecycle().value ?: user.fullName, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
+            HomeHeader("السلام عليكم", user.fullName, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
@@ -88,11 +89,12 @@ fun TeacherHome(user: Member, nav: NavHostController) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile(if (user.allCircles) "الطلاب" else "طلابي", "${students.size}", Icons.Outlined.School, Brand.Navy, Modifier.weight(1f))
+                    StatTile("طلابي", "${students.size}", Icons.Outlined.School, Brand.Navy, Modifier.weight(1f))
                     StatTile("آيات الأسبوع", "${stats.ayatThisWeek}", Icons.Outlined.AutoStories, Brand.Maroon, Modifier.weight(1f))
                     StatTile("حضور اليوم", if (stats.attendanceToday > 0) Fmt.pct(stats.attendanceToday) else "—", Icons.Outlined.FactCheck, Brand.Green, Modifier.weight(1f), onClick = { nav.navigate("attendance") })
                 }
-                SectionHeader(if (user.allCircles) "الحلقات" else "حلقاتي")
+                SectionHeader("حلقاتي", "كل الحلقات (عرض)") { nav.navigate("circles") }
+                if (circles.isEmpty()) EmptyState("لم تُسند لك حلقة بعد", "تسند الإدارة الحلقة لكل معلم من الإعدادات ← الإدارة ← المعلمون")
             }
         }
         items(circles) { c -> Box(Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) { CircleCard(c, snap) { nav.navigate("circle/${c.id}") } } }

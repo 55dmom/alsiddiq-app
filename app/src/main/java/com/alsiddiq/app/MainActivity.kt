@@ -38,7 +38,16 @@ class MainActivity : ComponentActivity() {
             "adhkar" -> com.alsalmi.buttons.adhkar.AdhkarActivity.start(this)
             "duas" -> com.alsalmi.buttons.duas.DuasActivity.start(this)
             "menu" -> com.alsiddiq.app.ui.components.Tools.openOnStart = true
+            "about" -> com.alsiddiq.app.ui.about.AboutActivity.start(this)
+            "about_edit" -> com.alsiddiq.app.ui.about.AboutActivity.start(this, edit = true)
+            "developer" -> com.alsiddiq.app.ui.about.DeveloperActivity.start(this)
         }
+        // CI screenshots of v3.2's sync line in the demo build (simulated outbox; the real one needs the central database).
+        if (BuildConfig.DEBUG) intent?.getStringExtra("sim_pending")?.toIntOrNull()?.let { com.alsiddiq.app.ui.screens.SyncSim.pending = it }
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("sim_reauth", false) == true) com.alsiddiq.app.ui.screens.SyncSim.needsPassword = true
+        if (BuildConfig.DEBUG) intent?.getStringExtra("sim_keys")?.let { com.alsiddiq.app.ui.screens.SyncSim.pendingKeys = it.split(",").map { k -> k.trim() }.toSet() }
+        // v3.2: every app open sends what is waiting (WorkManager waits for the network if there is none).
+        if (container.cloudConfigured) runCatching { com.alsiddiq.app.notify.SyncWorker.kick(this) }
         if (BuildConfig.DEBUG && intent?.getStringExtra("open_tool") == "mushaf_page") {
             val page = intent?.getStringExtra("page")?.toIntOrNull() ?: 1
             setContent { com.alsalmi.buttons.mushaf.MushafScreen(onBack = { finish() }, startPage = page) }

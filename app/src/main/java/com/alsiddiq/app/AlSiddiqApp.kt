@@ -40,6 +40,7 @@ class AlSiddiqApp : Application() {
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(this).enqueueUniquePeriodicWork("alsiddiq-notifications", ExistingPeriodicWorkPolicy.KEEP, req)
+            com.alsiddiq.app.notify.SyncWorker.schedule(this)   // v3.2: waiting changes go up on open and whenever the network is back
         }
     }
 }
