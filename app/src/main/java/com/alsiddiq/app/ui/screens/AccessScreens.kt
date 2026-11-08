@@ -61,8 +61,8 @@ fun ViewerHome(user: Member, nav: NavHostController) {
     val totalJuz = per.sumOf { it.second.juzEquivalent }
     val today = LocalDate.now()
     val reports = snap.announcements.sortedByDescending { it.createdAt }.take(3)
-    // His request (Nov 8): a faint Islamic background on the home screen, in the theme's colour (not inside his tools).
-    LazyColumn(Modifier.fillMaxSize().islamicBackdrop(Brand.Navy), contentPadding = PaddingValues(bottom = 24.dp)) {
+    // His request (Nov 8, 5:42 PM): a realistic, blurred background photo on the home screen (not inside his tools).
+    LazyColumn(Modifier.fillMaxSize().homeBackdrop(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             HomeHeader("السلام عليكم ورحمة الله", snap.center.name, Fmt.dayTitle(today) + " • " + Fmt.hijri(today), snap.notifications.count { !it.read }) { nav.navigate("notifications") }
         }

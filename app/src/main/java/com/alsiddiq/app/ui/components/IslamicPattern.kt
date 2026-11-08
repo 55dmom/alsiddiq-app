@@ -1,6 +1,14 @@
 package com.alsiddiq.app.ui.components
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.paint
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.alsiddiq.app.R
+import com.alsiddiq.app.ui.theme.Brand
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -96,4 +104,21 @@ fun Modifier.islamicPatternOverlay(color: Color, alpha: Float, cell: Dp = 72.dp)
     val cellPx = cell.toPx()
     val stroke = 1.dp.toPx()
     onDrawBehind { patternTiles(c, cellPx, stroke) }
+}
+
+/**
+ * His change (Nov 8, 5:42 PM): «الخلفية حق الصفحة الرئيسية واقعية لكن ضبابية» — a realistic photo (a mosque dome and minaret at dusk,
+ * no people or lettering), already Gaussian-blurred in the asset so it looks the same on every Android version, under a scrim in the
+ * theme's own background colour so cards and text stay readable on all themes (light and night).
+ */
+@Composable
+fun Modifier.homeBackdrop(): Modifier {
+    val bg = Brand.Bg
+    val tint = Brand.Navy
+    return this
+        .paint(painterResource(R.drawable.home_bg_blur), contentScale = ContentScale.Crop)
+        .drawBehind {
+            drawRect(Brush.verticalGradient(listOf(bg.copy(alpha = 0.36f), bg.copy(alpha = 0.48f), bg.copy(alpha = 0.68f))))
+            drawRect(tint.copy(alpha = 0.06f))
+        }
 }

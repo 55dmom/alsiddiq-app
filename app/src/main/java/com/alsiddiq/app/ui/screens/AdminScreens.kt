@@ -55,8 +55,8 @@ fun AdminHome(user: Member, nav: NavHostController) {
     val demo = isDemo()
     val stats = remember(snap) { Stats.forCenter(snap, snap.students) }
     val today = LocalDate.now()
-    // His request (Nov 8): a faint Islamic background on the home screen, in the theme's colour (not inside his tools).
-    LazyColumn(Modifier.fillMaxSize().islamicBackdrop(Brand.Navy), contentPadding = PaddingValues(bottom = 24.dp)) {
+    // His request (Nov 8, 5:42 PM): a realistic, blurred background photo on the home screen (not inside his tools).
+    LazyColumn(Modifier.fillMaxSize().homeBackdrop(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             HomeHeader(
                 "السلام عليكم ورحمة الله", snap.center.name,

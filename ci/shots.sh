@@ -215,10 +215,11 @@ st 44_tools_menu_bottom default --es demo_login gate --es open_tool menu
 adb shell input swipe 540 1800 540 500 400; sleep 1.5; adb exec-out screencap -p > shots/44_tools_menu_bottom.png
 st 44b_night_about night --es demo_login gate --es open_tool about
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/43_about.crash.txt; [ -s shots/43_about.crash.txt ] || rm -f shots/43_about.crash.txt
-# His request (4:38 PM): faint Islamic background on the home screens (2 themes) and the luxurious opening screen
-st 58_home_islamic_bg_admin default --es demo_login admin --es route home
-st 58b_home_islamic_bg_viewer_sand sand --es demo_login viewer --es route home
-st 58c_home_islamic_bg_teacher_night night --es demo_login teacher --es route home
+# His requests: realistic blurred home background (5:42 PM, 3 themes) and the luxurious opening screen (4:38 PM)
+st 61_home_real_bg_admin default --es demo_login admin --es route home
+adb shell input swipe 540 1500 540 700 300; sleep 1; adb exec-out screencap -p > shots/61b_home_real_bg_admin_scrolled.png
+st 61c_home_real_bg_viewer_sand sand --es demo_login viewer --es route home
+st 61d_home_real_bg_teacher_night night --es demo_login teacher --es route home
 adb shell am force-stop $PKG; adb shell pm clear $PKG >/dev/null; adb shell am start -n $PKG/$ACT; sleep 9; nodlg; adb exec-out screencap -p > shots/58d_gate_luxury.png
 adb shell input swipe 540 1700 540 700 400; sleep 1.2; adb exec-out screencap -p > shots/58e_gate_luxury_scrolled.png
 # v2 tasbeeh and asma (his new modules, exactly as given): opened full screen, a few taps, the backgrounds sheet

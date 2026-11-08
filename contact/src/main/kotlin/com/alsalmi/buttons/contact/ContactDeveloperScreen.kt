@@ -57,9 +57,9 @@ internal object CtInfo {
     const val SUBTITLE = "تواصل معنا"
     const val BODY = "راسلني على أي وحدة منها: اقتراح، سؤال، أو استفسار."
     // His three contacts (Nov 8): Instagram, e-mail, and his personal Telegram account (not the channel).
-    const val INSTAGRAM = "INSTAGRAM_USER"
-    const val EMAIL = "EMAIL_ADDRESS"
-    const val TELEGRAM = "TELEGRAM_USER"
+    const val INSTAGRAM = ""  // not given yet (Nov 8, 5:46 PM): the row is hidden until it is filled in
+    const val EMAIL = "Allethyeme@gmail.com"
+    const val TELEGRAM = "a16da"
 }
 
 /** One contact row: label, what is shown, the link it opens, and what «نسخ» copies. */
@@ -207,7 +207,7 @@ fun ContactDeveloperScreen(onBack: (() -> Unit)? = null) {
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
                             Text(CtInfo.BODY, color = c.sub, fontSize = 16.sp, textAlign = TextAlign.Center, lineHeight = 24.sp)
-                            ctLinks().forEach { l ->
+                            ctLinks().filter { it.ready }.forEach { l ->
                                 ContactRow(l, c, copied = copiedKey == l.label, onOpen = { if (l.ready) openLink(ctx, l.url) }) {
                                     if (l.ready) { copyText(ctx, l.copy); copiedKey = l.label; copied = true }
                                 }
