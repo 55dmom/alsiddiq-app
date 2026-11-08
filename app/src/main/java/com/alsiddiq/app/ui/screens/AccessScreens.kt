@@ -68,6 +68,7 @@ fun ViewerHome(user: Member, nav: NavHostController) {
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 StatusBanners(Modifier.padding(top = 12.dp))
+                com.alsiddiq.app.ui.components.OccasionBanner(Modifier.padding(top = 12.dp))
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Brand.GoldSoft).padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically) {

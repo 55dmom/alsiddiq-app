@@ -14,6 +14,7 @@ class MainActivity : ComponentActivity() {
         val container = (application as AlSiddiqApp).container
         // «الثيمات»: CI can preselect a theme for screenshots (debug only); otherwise the saved choice.
         if (BuildConfig.DEBUG) intent?.getStringExtra("theme")?.let { com.alsiddiq.app.ui.theme.AppThemes.select(this, com.alsiddiq.app.ui.theme.AppThemes.byId(it)) }
+        if (BuildConfig.DEBUG) intent?.getStringExtra("sim_date")?.let { com.alsiddiq.app.ui.theme.Occasions.simulate = it }
         com.alsiddiq.app.ui.theme.AppThemes.load(this)
         if (BuildConfig.DEBUG && intent?.getBooleanExtra("open_themes", false) == true) com.alsiddiq.app.ui.components.ThemesUi.openOnStart = true
         // Debug-only hooks used by CI to open a screen directly for screenshots.
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AlSiddiqTheme {
                 AppRoot(container, autoLogin, startRoute, ciLogin, selfTest, ciViewer, ciTry, photoTest)
+                com.alsiddiq.app.ui.components.OccasionPopupHost()
             }
         }
     }

@@ -93,6 +93,7 @@ object AppThemes {
     }
     /** Occasion first (forced while its dates last), else the user's choice; then hand the colours to his tools. */
     private fun apply(ctx: Context) {
+        Occasions.init(ctx)
         activeOccasion = Occasions.activeNow()
         val p = activeOccasion?.palette ?: byId(chosenId)
         Brand.palette = p

@@ -66,6 +66,7 @@ fun AdminHome(user: Member, nav: NavHostController) {
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 StatusBanners(Modifier.padding(top = 12.dp))
+                com.alsiddiq.app.ui.components.OccasionBanner(Modifier.padding(top = 12.dp))
                 Spacer(Modifier.height(10.dp))
                 RoleStrip(user)
                 Spacer(Modifier.height(10.dp))

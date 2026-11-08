@@ -94,4 +94,23 @@ st 25c_small_home default --es demo_login viewer --es route home
 st 25d_small_settings default --es demo_login viewer --es route viewer_settings
 st 25e_small_themes default --es demo_login gate --ez open_themes true
 adb shell wm size reset; adb shell wm density reset
+# «ثيمات المناسبات» with a simulated date (debug build only): popup on open, small card on home, picker locked, a tool in its colours
+adb logcat -c
+oc() { # name sim_date extra-args...
+  local n="$1" d="$2"; shift 2
+  adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es sim_date "$d" "$@"; sleep 12
+  adb exec-out screencap -p > "shots/$n.png"
+}
+oc 30_occ_ramadan_popup 2027-02-20 --es demo_login gate; adb shell input keyevent 4; sleep 1
+oc 30b_occ_ramadan_home 2027-02-20 --es demo_login viewer --es route home
+oc 30c_occ_ramadan_picker 2027-02-20 --es demo_login gate --ez open_themes true
+oc 30d_occ_ramadan_prayer 2027-02-20 --es open_tool prayer
+oc 31_occ_eidfitr_popup h:10-1 --es demo_login gate; adb shell input keyevent 4; sleep 1
+oc 31b_occ_eidfitr_home h:10-1 --es demo_login viewer --es route home
+oc 32_occ_arafah_popup h:12-9 --es demo_login gate; adb shell input keyevent 4; sleep 1
+oc 32b_occ_arafah_home h:12-9 --es demo_login viewer --es route home
+oc 33_occ_sep26_popup 2026-09-26 --es demo_login gate; adb shell input keyevent 4; sleep 1
+oc 33b_occ_sep26_home 2026-09-26 --es demo_login viewer --es route home
+oc 34_occ_none_after 2026-11-08 --es demo_login viewer --es route home
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/30_occasions.crash.txt; [ -s shots/30_occasions.crash.txt ] || rm -f shots/30_occasions.crash.txt
 ls -la shots

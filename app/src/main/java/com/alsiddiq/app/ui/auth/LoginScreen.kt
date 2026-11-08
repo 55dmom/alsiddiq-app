@@ -90,6 +90,7 @@ private fun GateFrame(onBack: (() -> Unit)? = null, tools: Boolean = false, cont
             Text(name.ifBlank { "مركز الصديق لتعليم القرآن الكريم" }, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
             Box(Modifier.padding(top = 8.dp).width(56.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Brand.Gold))
             Spacer(Modifier.height(26.dp))
+            com.alsiddiq.app.ui.components.OccasionBanner(Modifier.padding(bottom = 14.dp))
             content()
             Spacer(Modifier.height(30.dp))
         }
