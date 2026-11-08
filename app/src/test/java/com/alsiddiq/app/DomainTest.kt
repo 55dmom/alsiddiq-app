@@ -77,4 +77,12 @@ class DomainTest {
         assertEquals("مبتدئ", ArabicText.level("تمهيدي"))
         assertEquals("متوسط", ArabicText.level("متوسط"))
     }
+
+    @Test fun circleFee() {
+        assertEquals("الرسوم: ٥٬٠٠٠ ريال يمني شهرياً", ArabicText.fee(5000, "monthly"))
+        assertEquals("الرسوم: ١٢٬٥٠٠ ريال يمني للفصل", ArabicText.fee(12500, "term"))
+        assertEquals("الرسوم: ٣٠٠ ريال يمني مرة واحدة", ArabicText.fee(300, "once"))
+        assertEquals("الرسوم: ١٬٢٥٠٬٠٠٠ ريال يمني شهرياً", ArabicText.fee(1250000, null))
+        assertEquals(null, ArabicText.fee(null, "monthly"))
+    }
 }

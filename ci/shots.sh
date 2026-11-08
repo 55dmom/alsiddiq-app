@@ -144,6 +144,9 @@ st 43f_gate_about_dev_buttons default --es demo_login gate
 # his text fixes: student counts (طالب واحد/طالبان/N طلاب/N طالب) on circle cards, «مبتدئ» level
 st 45_circles_counts default --es demo_login admin --es route circles
 st 45b_circle_form_levels default --es demo_login admin --es route circle_edit/c3
+adb shell input swipe 540 1700 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/45c_circle_form_fee.png
+st 45d_circle_page_fee default --es demo_login viewer --es route circle/c1
+st 45e_home_cards_fee default --es demo_login viewer --es route home
 st 44_tools_menu_bottom default --es demo_login gate --es open_tool menu
 adb shell input swipe 540 1800 540 500 400; sleep 1.5; adb exec-out screencap -p > shots/44_tools_menu_bottom.png
 st 44b_night_about night --es demo_login gate --es open_tool about

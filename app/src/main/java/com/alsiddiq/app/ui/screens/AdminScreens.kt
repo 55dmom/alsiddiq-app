@@ -168,6 +168,7 @@ fun CircleCard(c: Circle, snap: CenterSnapshot, onClick: () -> Unit) {
                 Text(c.name, style = MaterialTheme.typography.titleSmall)
                 Text(snap.teacherOf(c) ?: "بدون معلم", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                 if (c.schedule.isNotBlank()) Text(c.schedule, style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                ArabicText.fee(c.feeYer, c.feePeriod)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Brand.Gold) }
             }
             Column(horizontalAlignment = Alignment.End) {
                 Pill(ArabicText.students(students.size), Brand.Navy)

@@ -354,3 +354,28 @@ row the app creates carries a **client-made uuid** primary key, so sending the s
   line text.
 - NOT verified against the live server (no live writes allowed today) and not in airplane mode on a device: the CI
   screenshots of the status line / chips use a simulated queue in the demo build.
+
+# v3.5 — circle fees (LIVE since 2026-11-08 13:08 Riyadh)
+His request (1:04 PM): each circle has a fee in Yemeni rial; only the admin sets it; everyone who can see the circle sees it.
+SQL `0012_v35_circle_fees.sql` (additive, no rows written).
+
+## Schema
+- `circles.fee_yer integer` (nullable, `check (fee_yer >= 0)`): the amount in YER. **null = not set → show nothing.**
+- `circles.fee_period text default 'monthly'` (`check in ('monthly','term','once')`): شهرياً / للفصل / مرة واحدة.
+  Existing rows read `fee_period = 'monthly'` (column default) and `fee_yer = null`.
+- Writes: circles are already admin-only (`circles_admin`, ALL, `center_id = my_center() and is_admin()`); everyone in the
+  centre reads them (`circles_read`). Extra guard: trigger `trg_circles_fee_guard` (function `circles_fee_guard()`) refuses any
+  insert with a fee / any change of `fee_yer` or `fee_period` by a signed-in caller who is not the admin
+  («رسوم الحلقة تحددها الإدارة فقط», 42501). Server code without a user (the access function's service role) is unaffected.
+
+## Client
+- Read with the circle (`select=*`). Write in the admin's circle upsert: `{"fee_yer": 5000 | null, "fee_period": "monthly"|"term"|"once"}`.
+  Goes through the offline queue like any admin circle edit.
+- Display (card + circle page), only when `fee_yer` is not null: «الرسوم: ٥٬٠٠٠ ريال يمني شهرياً» — Arabic-Indic digits with
+  the Arabic thousands separator «٬»; period words: monthly «شهرياً», term «للفصل», once «مرة واحدة». `fee_yer = 0` shows «الرسوم: مجاناً».
+- Admin form: «رسوم الحلقة (ريال يمني)» (numeric keyboard; empty = not set) + period chips شهرياً / للفصل / مرة واحدة.
+
+## Verified 2026-11-08 (one BEGIN … ROLLBACK query, before and after going live; live counts unchanged)
+Teacher (owner of the circle) and viewer read the fee, every fee write = 0 rows (RLS); admin sets the fee and the period;
+negative fee refused by the CHECK; with RLS bypassed and teacher claims the trigger refuses («رسوم الحلقة تحددها الإدارة فقط»);
+the service path (no user) can still update `teacher_name`.

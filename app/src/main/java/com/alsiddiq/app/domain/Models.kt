@@ -37,7 +37,10 @@ data class Circle(
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     /** v3.1: the teacher's name (from teacher_names). */
-    val teacherName: String? = null
+    val teacherName: String? = null,
+    /** v3.5: the fee in Yemeni rial (null = not set) and its period: monthly | term | once. Set by the admin only. */
+    val feeYer: Int? = null,
+    val feePeriod: String? = null
 )
 
 @Serializable

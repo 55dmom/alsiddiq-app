@@ -94,6 +94,7 @@ fun CircleDetailScreen(user: Member, nav: NavHostController, id: String) {
                     Column(Modifier.weight(1f)) {
                         Text(snap.teacherOf(circle) ?: "بدون معلم", style = MaterialTheme.typography.titleSmall)
                         Text(listOf(ArabicText.level(circle.level), circle.schedule).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                        ArabicText.fee(circle.feeYer, circle.feePeriod)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Brand.Gold) }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -158,6 +159,9 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
     var level by remember { mutableStateOf(ArabicText.level(existing?.level ?: "")) }
     var schedule by remember { mutableStateOf(existing?.schedule ?: "") }
     var capacity by remember { mutableStateOf((existing?.capacity ?: 15).toString()) }
+    // v3.5: the fee (Yemeni rial), admin only; empty = not set
+    var fee by remember { mutableStateOf(existing?.feeYer?.toString() ?: "") }
+    var feePeriod by remember { mutableStateOf(existing?.feePeriod ?: "monthly") }
     var pickTeacher by remember { mutableStateOf(false) }
     var askDelete by remember { mutableStateOf(false) }
     val levels = ArabicText.LEVELS   // «تمهيدي» is now «مبتدئ» (his fix)
@@ -176,6 +180,11 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
                 Field(schedule, { schedule = it }, "الموعد (مثال: بعد العصر • السبت–الأربعاء)")
                 Spacer(Modifier.height(10.dp))
                 Field(capacity, { capacity = it.filter { ch -> ch.isDigit() }.take(3) }, "السعة القصوى", keyboard = KeyboardType.Number)
+                Spacer(Modifier.height(10.dp))
+                Field(fee, { fee = it.map { ch -> if (ch in '٠'..'٩') '0' + (ch - '٠') else ch }.filter { ch -> ch.isDigit() }.joinToString("").take(9) }, "رسوم الحلقة (ريال يمني)", keyboard = KeyboardType.Number)
+                Spacer(Modifier.height(6.dp))
+                ChoiceChips(ArabicText.FEE_PERIODS.map { it.second }, ArabicText.FEE_PERIODS.indexOfFirst { it.first == feePeriod }.coerceAtLeast(0), { feePeriod = ArabicText.FEE_PERIODS[it].first })
+                ArabicText.fee(fee.toIntOrNull(), feePeriod)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Brand.Muted, modifier = Modifier.padding(top = 4.dp)) }
             }
         }
         item {
@@ -183,7 +192,8 @@ fun CircleEditScreen(user: Member, nav: NavHostController, id: String) {
                 onClick = {
                     val c = (existing ?: Circle("", "", null)).copy(
                         name = name.trim(), teacherName = teacherName, teacherId = teacherId, level = level, schedule = schedule.trim(),
-                        capacity = capacity.toIntOrNull() ?: 15
+                        capacity = capacity.toIntOrNull() ?: 15,
+                        feeYer = fee.toIntOrNull(), feePeriod = feePeriod
                     )
                     actions.run(if (existing == null) "تم إنشاء الحلقة" else "تم الحفظ", { repo.saveCircle(c) }) { nav.popBackStack() }
                 },

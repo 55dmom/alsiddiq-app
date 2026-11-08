@@ -27,11 +27,13 @@ internal object Rows {
     fun circle(o: JsonObject) = Circle(
         id = o.s("id")!!, name = o.s("name") ?: "", teacherId = o.s("teacher_id"), level = o.s("level") ?: "",
         schedule = o.s("schedule") ?: "", capacity = o.i("capacity") ?: 15, active = o.b("active") ?: true, createdAt = ts(o.s("created_at")),
-        teacherName = o.s("teacher_name")
+        teacherName = o.s("teacher_name"),
+        feeYer = o.i("fee_yer"), feePeriod = o.s("fee_period")
     )
     fun circleRow(c: Circle, center: String) = buildJsonObject {
         put("id", c.id); put("center_id", center); put("name", c.name); put("teacher_id", c.teacherId)
         put("teacher_name", c.teacherName)
+        put("fee_yer", c.feeYer); put("fee_period", c.feePeriod ?: "monthly")
         put("level", c.level); put("schedule", c.schedule); put("capacity", c.capacity); put("active", c.active)
         put("updated_at", iso(System.currentTimeMillis()))
     }
