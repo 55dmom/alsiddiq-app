@@ -72,6 +72,29 @@ st() { # name theme extra-args...
   adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es theme "$th" "$@"; sleep 12; nodlg; sleep 1
   adb exec-out screencap -p > "shots/$n.png"
 }
+# build 10: «الأدوات» moved to the bottom bar (admin / teacher / viewer), the tab opened, and a 360dp-wide phone
+tapt() { # tap the lowest on-screen node whose text is exactly $1
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep "text=\"$1\"" | tail -1 | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/' > /tmp/b.txt
+  read a b c d < /tmp/b.txt; [ -n "$d" ] && adb shell input tap $(( (a+c)/2 )) $(( (b+d)/2 ))
+}
+shot 50_admin_home_bar admin home 14
+tapt "الأدوات"; sleep 2.5; adb exec-out screencap -p > shots/50a_admin_tools_tapped.png
+tapt "المصحف"; sleep 5; adb exec-out screencap -p > shots/50a2_admin_tools_mushaf.png
+shot 50b_teacher_home_bar teacher home 14
+shot 50c_viewer_home_bar viewer home 14
+shot 50d_tools_tab_admin admin tools
+shot 50e_tools_tab_teacher teacher tools
+shot 50f_tools_tab_viewer viewer tools
+adb shell input swipe 540 1800 540 500 400; sleep 1.5; adb exec-out screencap -p > shots/50g_tools_tab_viewer_bottom.png
+st 50h_tools_tab_night night --es demo_login admin --es route tools
+adb shell wm size 720x1280; adb shell wm density 320; sleep 2
+st 51_small_admin_home default --es demo_login admin --es route home
+st 51b_small_teacher_home default --es demo_login teacher --es route home
+st 51c_small_viewer_home default --es demo_login viewer --es route home
+st 51d_small_tools_tab default --es demo_login admin --es route tools
+adb shell wm size reset; adb shell wm density reset
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/50_tools_tab.crash.txt; [ -s shots/50_tools_tab.crash.txt ] || rm -f shots/50_tools_tab.crash.txt
 st 20_themes_picker default --es demo_login gate --ez open_themes true
 st 21_theme_emerald_gate emerald --es demo_login gate
 st 21b_theme_emerald_home emerald --es demo_login viewer --es route home

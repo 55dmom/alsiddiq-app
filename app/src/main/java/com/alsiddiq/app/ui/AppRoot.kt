@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -44,6 +45,7 @@ fun tabsFor(role: Role): List<TabItem> = when (role) {
         TabItem("students", "الطلاب", Icons.Outlined.School, Icons.Filled.School),
         TabItem("circles", "الحلقات", Icons.Outlined.Groups, Icons.Filled.Groups),
         TabItem("reports", "التقارير", Icons.Outlined.Insights, Icons.Filled.Insights),
+        TabItem("tools", "الأدوات", Icons.Outlined.GridView, Icons.Filled.GridView),
         TabItem("viewer_settings", "الإعدادات", Icons.Outlined.Settings, Icons.Filled.Settings)
     )
     Role.ADMIN -> listOf(
@@ -51,6 +53,7 @@ fun tabsFor(role: Role): List<TabItem> = when (role) {
         TabItem("circles", "الحلقات", Icons.Outlined.Groups, Icons.Filled.Groups),
         TabItem("students", "الطلاب", Icons.Outlined.School, Icons.Filled.School),
         TabItem("reports", "التقارير", Icons.Outlined.Insights, Icons.Filled.Insights),
+        TabItem("tools", "الأدوات", Icons.Outlined.GridView, Icons.Filled.GridView),
         TabItem("more", "الإدارة", Icons.Outlined.AdminPanelSettings, Icons.Filled.AdminPanelSettings)
     )
     Role.TEACHER -> listOf(
@@ -58,7 +61,9 @@ fun tabsFor(role: Role): List<TabItem> = when (role) {
         TabItem("circles", "الحلقات", Icons.Outlined.Groups, Icons.Filled.Groups),
         TabItem("record_start", "تسجيل", Icons.Outlined.AddCircleOutline, Icons.Filled.AddCircle),
         TabItem("attendance", "الحضور", Icons.Outlined.FactCheck, Icons.Filled.FactCheck),
-        TabItem("teacher_more", "المزيد", Icons.Outlined.GridView, Icons.Filled.GridView)
+        // «المزيد» had the grid icon; it moves to «الأدوات» so the two never look alike.
+        TabItem("teacher_more", "المزيد", Icons.Outlined.MoreHoriz, Icons.Filled.MoreHoriz),
+        TabItem("tools", "الأدوات", Icons.Outlined.GridView, Icons.Filled.GridView)
     )
 }
 
@@ -194,7 +199,8 @@ private fun MainShell(user: Member, snackbar: SnackbarHostState, startRoute: Str
                                     }
                                 } else Icon(if (sel) t.selectedIcon else t.icon, t.label)
                             },
-                            label = { Text(t.label, style = MaterialTheme.typography.labelSmall) },
+                            // 6 items on a 360dp phone: a slightly smaller label on one line, never wrapped or cut.
+                            label = { Text(t.label, style = if (tabs.size >= 6) MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp) else MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Brand.Navy,
                                 selectedTextColor = Brand.Navy,
@@ -238,6 +244,7 @@ private fun AppNavHost(nav: NavHostController, user: Member) {
         composable("more") { MoreScreen(user, nav) }
         composable("teacher_more") { TeacherMoreScreen(user, nav) }
         composable("viewer_settings") { ViewerSettingsScreen(user, nav) }
+        composable("tools") { com.alsiddiq.app.ui.components.ToolsTabScreen() }
         composable("role_login/{kind}") {
             val kind = if (it.arguments?.getString("kind") == "TEACHER") Role.TEACHER else Role.ADMIN
             com.alsiddiq.app.ui.auth.RoleLoginScreen(kind) { nav.popBackStack() }

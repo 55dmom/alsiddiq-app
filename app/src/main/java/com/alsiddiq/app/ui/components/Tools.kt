@@ -56,10 +56,25 @@ object Tools {
 
 @Composable
 fun ToolsSheet(onDismiss: () -> Unit) {
-    val ctx = LocalContext.current
     // 7 tools now: open fully and scroll on small phones so none is cut off.
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Card, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+        ToolsMenuContent(onDismiss, Modifier.padding(bottom = 28.dp))
+    }
+}
+
+/** The «الأدوات» tab in the bottom bar: the same menu as the sheet, as a page (no password). */
+@Composable
+fun ToolsTabScreen() {
+    Box(Modifier.fillMaxSize().background(Brand.Card)) {
+        ToolsMenuContent(onDismiss = {}, Modifier.statusBarsPadding().padding(top = 18.dp, bottom = 20.dp))
+    }
+}
+
+/** The menu itself, shared by the sheet (opening screen) and the bottom-bar tab. */
+@Composable
+private fun ToolsMenuContent(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).then(modifier)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Brand.GoldSoft), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.GridView, null, tint = Brand.Gold)
@@ -94,7 +109,6 @@ fun ToolsSheet(onDismiss: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text("أدوات أكثر قريباً", style = MaterialTheme.typography.labelSmall, color = Brand.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
-    }
 }
 
 /** The «الأدوات» button (opening screen header, etc.). */
