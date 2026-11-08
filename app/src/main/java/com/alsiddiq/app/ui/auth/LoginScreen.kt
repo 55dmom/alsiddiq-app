@@ -63,7 +63,7 @@ fun PasswordField(value: String, onChange: (String) -> Unit, label: String, onDo
 }
 
 @Composable
-private fun GateFrame(onBack: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun GateFrame(onBack: (() -> Unit)? = null, tools: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     val name by LocalContainer.current.auth.centerName.collectAsState()
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Brand.Navy, Brand.NavyDark, Brand.Bg), endY = 1500f))) {
         Column(
@@ -75,6 +75,10 @@ private fun GateFrame(onBack: (() -> Unit)? = null, content: @Composable ColumnS
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "رجوع", tint = Color.White) }
                 }
                 Spacer(Modifier.height(4.dp))
+            } else if (tools) {
+                // «الأدوات»: his side buttons, open to everyone before any password.
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp)) { com.alsiddiq.app.ui.components.ToolsButton() }
+                Spacer(Modifier.height(8.dp))
             } else Spacer(Modifier.height(52.dp))
             Box(Modifier.size(132.dp).clip(RoundedCornerShape(36.dp)).background(Color.White), contentAlignment = Alignment.Center) {
                 Image(painterResource(R.drawable.logo), "شعار مركز الصديق", Modifier.size(118.dp))
@@ -110,7 +114,7 @@ fun LoginScreen() {
             busy = false
         }
     }
-    GateFrame {
+    GateFrame(tools = true) {
         Surface(shape = RoundedCornerShape(26.dp), color = Color.White, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text("أدخل كلمة السر", style = MaterialTheme.typography.titleLarge)

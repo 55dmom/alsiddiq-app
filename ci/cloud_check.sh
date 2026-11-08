@@ -43,20 +43,42 @@ case "$ST" in *'"needs_setup":true'*) ;; *) echo "An admin password already exis
 
 # 1) Fresh install -> the first-time setup screen; type the three passwords on the real screen (Tab moves to the next field)
 app; sleep 16; shot 20_cloud_setup
-F=$(fields | sed -n 2p); echo "setup: admin field at $F" | tee -a $LOG
-if [ -n "$F" ]; then
-  adb shell input tap $F; sleep 1
-  for v in "$AP" "$AP" "$VP" "$VP" "$TP" "$TP"; do adb shell input text "$v"; sleep 0.6; adb shell input keyevent 61; sleep 0.6; done
-  shot 20b_cloud_setup_filled
-  adb shell input keyevent 66; sleep 2
-  # press the save button if Enter didn't submit
-  BTN=$(adb exec-out uiautomator dump /dev/tty 2>/dev/null | python3 -c '
-import sys,re
-x=sys.stdin.read(); m=re.search(r"text=\"حفظ وبدء الاستخدام\"[^>]*bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"",x)
-print("%d %d"%((int(m[1])+int(m[3]))//2,(int(m[2])+int(m[4]))//2) if m else "")')
-  [ -n "$BTN" ] && adb shell input tap $BTN
-  sleep 12; shot 20c_cloud_after_setup
-fi
+# Fill the 6 password fields by tapping each one (visible fields first, then scroll for the teachers' pair).
+python3 - "$AP" "$VP" "$TP" <<'PY' | tee -a $LOG
+import re, subprocess, sys, time
+AP, VP, TP = sys.argv[1:4]
+def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+def dump():
+    x = sh("adb exec-out uiautomator dump /dev/tty 2>/dev/null")
+    out = []
+    for m in re.finditer(r'<node [^>]*class="android.widget.EditText"[^>]*>', x):
+        n = m.group(0)
+        b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
+        out.append(((int(b[1]) + int(b[3])) // 2, (int(b[2]) + int(b[4])) // 2))
+    return x, out
+def typ(pt, v):
+    sh(f"adb shell input tap {pt[0]} {pt[1]}"); time.sleep(0.8); sh(f"adb shell input text {v}"); time.sleep(0.6)
+x, f = dump(); print("setup fields visible:", len(f))
+vals = [AP, AP, VP, VP]
+for pt, v in zip(f[1:5], vals): typ(pt, v)
+sh("adb shell input keyevent 4"); time.sleep(1)          # hide the keyboard
+sh("adb shell input swipe 540 1700 540 500 400"); time.sleep(1.5)
+x, f = dump(); print("after scroll fields:", len(f))
+for pt, v in zip(f[-2:], [TP, TP]): typ(pt, v)
+sh("adb shell input keyevent 4"); time.sleep(1)
+sh("adb shell input swipe 540 1700 540 500 400"); time.sleep(1.5)
+sh("adb exec-out screencap -p > shots/20b_cloud_setup_filled.png")
+x, _ = dump()
+m = re.search(r'text="حفظ وبدء الاستخدام"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', x)
+if not m:
+    m2 = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*>\s*<node[^>]*text="حفظ وبدء الاستخدام"', x)
+    m = m2
+if m:
+    sh(f"adb shell input tap {(int(m[1]) + int(m[3])) // 2} {(int(m[2]) + int(m[4])) // 2}"); print("pressed save")
+else:
+    print("save button not found in dump")
+PY
+sleep 14; shot 20c_cloud_after_setup
 ST2=$(fn '{"action":"status"}'); echo "status after typing setup: $ST2" | tee -a $LOG
 case "$ST2" in *'"needs_setup":false'*) echo "SETUP THROUGH THE REAL SCREEN: ok" | tee -a $LOG ;;
   *) echo "setup screen typing did not complete; using the same server call the form makes" | tee -a $LOG
@@ -79,8 +101,9 @@ echo "viewer screen shows read-only banner: $(screen_has 'وضع العرض')" |
 # 3) Settings -> «المعلمين»: type the shared teachers' password on the real screen
 app --es login_kind viewer --es login_pass "$VP" --es route role_login/TEACHER; sleep 14; shot 23_cloud_teachers_box
 type_into_first "$TP"; sleep 14
+adb shell input keyevent 4; sleep 3   # the CI hook re-opens this route inside the new section; step back to its home
 shot 24_cloud_teachers_home_after_typing
-echo "teachers section after typing: $(screen_has 'قسم المعلمين')" | tee -a $LOG
+echo "teachers section after typing the password on the real screen: $(screen_has 'قسم المعلمين')" | tee -a $LOG
 
 # 4) Viewer: app writes not offered; raw writes refused; viewer photo write refused
 app --es login_kind viewer --es login_pass "$VP" --ez selftest true --es try_student "$S1:$C1"; sleep 26

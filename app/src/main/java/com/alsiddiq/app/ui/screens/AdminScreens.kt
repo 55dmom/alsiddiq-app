@@ -191,7 +191,9 @@ fun MoreScreen(user: Member, nav: NavHostController) {
         item { RoleStrip(user) }
         item { SectionHeader("المعلمون وكلمات السر") }
         item { MenuRow("المعلمون", "${snap.activeTeacherNames().size} اسم • لمعرفة من سجّل", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teachers") } }
-        item { MenuRow("كلمات السر", "العامة والإدارة", Icons.Outlined.Password) { nav.navigate("passwords") } }
+        item { MenuRow("كلمات السر", "العامة والمعلمين والإدارة", Icons.Outlined.Password) { nav.navigate("passwords") } }
+        item { SectionHeader("الأدوات") }
+        items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
         item { SectionHeader("المتابعة") }
         item { MenuRow("الحضور والغياب", "تسجيل ومراجعة الحضور", Icons.Outlined.FactCheck) { nav.navigate("attendance") } }
         items(snap.circles.sortedBy { it.name }.take(6)) { c -> MenuRow("تقرير ${c.name}", "كم حفظوا ومن غاب", Icons.Outlined.Summarize, Brand.Gold) { nav.navigate("circle_report/${c.id}") } }

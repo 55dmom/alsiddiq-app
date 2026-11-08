@@ -20,7 +20,8 @@ internal object Rows {
 
     fun member(o: JsonObject) = Member(
         id = o.s("id")!!, fullName = o.s("full_name") ?: "", phone = o.s("phone") ?: "",
-        role = enumOf(o.s("role"), Role.VIEWER), active = o.b("active") ?: true, createdAt = ts(o.s("created_at"))
+        role = enumOf(o.s("role"), Role.VIEWER), active = o.b("active") ?: true, createdAt = ts(o.s("created_at")),
+        allCircles = o.s("access_kind") == "teachers"
     )
 
     fun circle(o: JsonObject) = Circle(

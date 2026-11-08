@@ -87,6 +87,8 @@ fun ViewerHome(user: Member, nav: NavHostController) {
                     StatTile("آيات الأسبوع", "${stats.ayatThisWeek}", Icons.Outlined.AutoStories, Brand.Navy, Modifier.weight(1f))
                     StatTile("حضور اليوم", if (stats.attendanceToday > 0) Fmt.pct(stats.attendanceToday) else "—", Icons.Outlined.FactCheck, Brand.Maroon, Modifier.weight(1f))
                 }
+                SectionHeader("الأدوات")
+                ToolsRow()
                 SectionHeader("التفاعل", "التقارير") { nav.navigate("reports") }
                 AppCard {
                     Text("عدد السجلات يومياً — آخر 14 يوماً", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
@@ -164,6 +166,8 @@ fun ViewerSettingsScreen(user: Member, nav: NavHostController) {
                 BigSectionButton("المعلمين", "كلمة سر المعلمين\nلكل الحلقات", Icons.Outlined.CoPresent, Brand.Maroon, Brand.MaroonSoft, Modifier.weight(1f)) { nav.navigate("role_login/TEACHER") }
             }
         }
+        item { SectionHeader("الأدوات") }
+        items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
         item { SectionHeader("عام") }
         item { MenuRow("التقارير والإعلانات", "${snap.announcements.size} منشور", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
@@ -204,7 +208,9 @@ fun TeacherMoreScreen(user: Member, nav: NavHostController) {
         item { SectionHeader("تقرير اليوم") }
         if (mine.isEmpty()) item { EmptyState("لا توجد حلقات بعد", "تنشئ الإدارة الحلقات من الإعدادات ← الإدارة") }
         else item { MenuRow("تقرير اليوم", "اختر الحلقة: كم حفظوا اليوم ومن غاب", Icons.Outlined.Summarize, Brand.Maroon) { nav.navigate("circle_report/${mine.first().id}") } }
-        item { SectionHeader("أدوات") }
+        item { SectionHeader("الأدوات") }
+        items(Tools.all) { t -> val ctx = androidx.compose.ui.platform.LocalContext.current; MenuRow(t.title, t.sub, t.icon, t.color) { t.open(ctx) } }
+        item { SectionHeader("أدوات المعلم") }
         item { MenuRow("طالب جديد", "إضافة سجل طالب في أي حلقة", Icons.Outlined.PersonAdd) { nav.navigate("student_edit/new" + (mine.firstOrNull()?.let { "?circle=${it.id}" } ?: "")) } }
         item { MenuRow("التقارير والإحصائيات", "رسوم الحلقات", Icons.Outlined.Insights) { nav.navigate("reports") } }
         item { MenuRow("المكافآت", "منح النقاط ولوحة الشرف", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }

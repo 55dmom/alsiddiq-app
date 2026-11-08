@@ -7,3 +7,6 @@ dependencyResolutionManagement {
 }
 rootProject.name = "AlSiddiq"
 include(":app")
+// His own side buttons («الأدوات»), as independent library modules.
+include(":tasbeeh")
+include(":asma")

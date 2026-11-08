@@ -48,4 +48,12 @@ shot 14_teacher_record teacher record/s1
 shot 15_teacher_attendance teacher attendance
 shot 16_teacher_report teacher circle_report/c1
 shot 17_teacher_more teacher teacher_more
+# His side buttons («الأدوات»): the menu on the opening screen, then each tool
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es demo_login gate --es open_tool menu; sleep 12; nodlg; sleep 1; adb exec-out screencap -p > shots/18_tools_menu.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool tasbeeh; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19_tool_tasbeeh.png
+adb shell input tap 540 1000; sleep 0.5; adb shell input tap 540 1000; sleep 0.5; adb shell input tap 540 1000; sleep 1; adb exec-out screencap -p > shots/19b_tool_tasbeeh_count.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool asma; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19c_tool_asma.png
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/19_tools.crash.txt; [ -s shots/19_tools.crash.txt ] || rm -f shots/19_tools.crash.txt
+shot 01b_viewer_home_tools viewer home 14
+adb shell input swipe 540 1500 540 700 300; sleep 1; adb exec-out screencap -p > shots/01c_viewer_home_scrolled.png
 ls -la shots
