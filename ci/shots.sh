@@ -50,6 +50,8 @@ shot 16_teacher_report teacher circle_report/c1
 shot 17_teacher_more teacher teacher_more
 # His side buttons («الأدوات»): the menu on the opening screen, then each tool
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es demo_login gate --es open_tool menu; sleep 12; nodlg; sleep 1; adb exec-out screencap -p > shots/18_tools_menu.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool prayer; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/18b_tool_prayer.png
+adb shell input swipe 540 1700 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/18c_tool_prayer_scrolled.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool tasbeeh; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19_tool_tasbeeh.png
 adb shell input tap 540 1000; sleep 0.5; adb shell input tap 540 1000; sleep 0.5; adb shell input tap 540 1000; sleep 1; adb exec-out screencap -p > shots/19b_tool_tasbeeh_count.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool asma; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19c_tool_asma.png
