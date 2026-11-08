@@ -78,6 +78,9 @@ tapt() { # tap the lowest on-screen node whose text is exactly $1
   adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep "text=\"$1\"" | tail -1 | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/' > /tmp/b.txt
   read a b c d < /tmp/b.txt; [ -n "$d" ] && adb shell input tap $(( (a+c)/2 )) $(( (b+d)/2 ))
 }
+st 54_gate_tools_block default --es demo_login gate
+adb shell input swipe 540 1900 540 500 500; sleep 1.5; adb exec-out screencap -p > shots/54b_gate_tools_block_scrolled.png
+adb shell input swipe 540 1900 540 500 500; sleep 1.5; adb exec-out screencap -p > shots/54c_gate_tools_block_bottom.png
 shot 50_admin_home_bar admin home 14
 tapt "الأدوات"; sleep 2.5; adb exec-out screencap -p > shots/50a_admin_tools_tapped.png
 tapt "المصحف"; sleep 5; adb exec-out screencap -p > shots/50a2_admin_tools_mushaf.png
@@ -125,6 +128,8 @@ st 51g_small_mushaf_p3 default --es open_tool mushaf_page --es page 3
 st 51h_small_mushaf_p106 default --es open_tool mushaf_page --es page 106
 st 51i_small_mushaf_p582 default --es open_tool mushaf_page --es page 582
 st 51j_small_teacher_tools default --es demo_login teacher --es route tools
+st 51m_small_gate default --es demo_login gate
+adb shell input swipe 360 1150 360 250 500; sleep 1.5; adb exec-out screencap -p > shots/51n_small_gate_scrolled.png
 adb shell wm size reset; adb shell wm density reset
 adb shell wm density 360; sleep 2
 MS; st 51k_480dp_mushaf_p106 default --es open_tool mushaf_page --es page 106

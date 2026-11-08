@@ -65,43 +65,49 @@ fun ToolsSheet(onDismiss: () -> Unit) {
 }
 
 /**
- * The «الأدوات» tab in the bottom bar (his layout, Nov 8): «مواقيت الصلاة» itself at the top (his own screen, embedded, no back arrow),
- * then the other tools as buttons, in their order. One page that scrolls; no password.
+ * His layout (Nov 8): «مواقيت الصلاة» open on its own (his screen, embedded), then the other tools as buttons, in their order.
+ * One shared block: the «الأدوات» tab and the opening screen (under the password card). No password; the host page scrolls it.
  */
 @Composable
-fun ToolsTabScreen() {
+fun ToolsBlock(titleColor: Color = Brand.Navy) {
     val ctx = LocalContext.current
     val others = Tools.all.filter { it !== Tools.prayer }
-    com.alsalmi.buttons.prayer.PrayerTimesScreen(onBack = null, footer = {
-        item(key = "tools_title") {
-            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.GridView, null, tint = Brand.Gold, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("الأدوات", style = MaterialTheme.typography.titleMedium, color = Brand.Navy)
-            }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        com.alsalmi.buttons.prayer.PrayerTimesPanel()
+        Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.GridView, null, tint = Brand.Gold, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("الأدوات", style = MaterialTheme.typography.titleMedium, color = titleColor)
         }
-        others.chunked(3).forEachIndexed { r, row ->
-            item(key = "tools_row_$r") {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { t ->
-                        Surface(onClick = { t.open(ctx) }, shape = RoundedCornerShape(18.dp), color = Brand.Card, shadowElevation = 1.dp, modifier = Modifier.weight(1f).heightIn(min = 104.dp)) {
-                            Column(Modifier.padding(vertical = 14.dp, horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(t.color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                                    Icon(t.icon, null, tint = t.color)
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Text(t.title, style = MaterialTheme.typography.titleSmall, color = Brand.Ink, textAlign = TextAlign.Center, maxLines = 2)
+        others.chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { t ->
+                    Surface(onClick = { t.open(ctx) }, shape = RoundedCornerShape(18.dp), color = Brand.Card, shadowElevation = 1.dp, modifier = Modifier.weight(1f).heightIn(min = 104.dp)) {
+                        Column(Modifier.padding(vertical = 14.dp, horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(t.color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                                Icon(t.icon, null, tint = t.color)
                             }
+                            Spacer(Modifier.height(8.dp))
+                            Text(t.title, style = MaterialTheme.typography.titleSmall, color = Brand.Ink, textAlign = TextAlign.Center, maxLines = 2)
                         }
                     }
-                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
-        item(key = "tools_themes") { ThemesEntry() }
-        item(key = "tools_about") { com.alsiddiq.app.ui.about.CenterInfoEntries() }
-        item(key = "tools_end") { Spacer(Modifier.height(8.dp)) }
-    })
+    }
+}
+
+/** The «الأدوات» tab in the bottom bar: the shared block, then «الثيمات», «عن المركز» and «تواصل مع المطوّر» as in the menu. */
+@Composable
+fun ToolsTabScreen() {
+    Column(Modifier.fillMaxSize().background(Brand.Bg).verticalScroll(rememberScrollState()).statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ToolsBlock()
+        ThemesEntry()
+        com.alsiddiq.app.ui.about.CenterInfoEntries()
+        Spacer(Modifier.height(8.dp))
+    }
 }
 
 /** The menu itself (the sheet on the opening screen). */

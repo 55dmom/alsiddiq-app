@@ -178,11 +178,21 @@ class PrayerBootReceiver : BroadcastReceiver() {
 /**
  * «مواقيت الصلاة» — the button's single entry composable.
  * @param onBack shows a back arrow in the top bar when not null.
- * @param footer optional extra list items under the times, for a host page that embeds this screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrayerTimesScreen(onBack: (() -> Unit)? = null, footer: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null) {
+fun PrayerTimesScreen(onBack: (() -> Unit)? = null) = PrayerTimesContent(onBack, embedded = false)
+
+/**
+ * The same «مواقيت الصلاة», to put inside another page (no top bar, no list of its own; the host scrolls it).
+ * Same state, texts and behaviour as [PrayerTimesScreen].
+ */
+@Composable
+fun PrayerTimesPanel() = PrayerTimesContent(null, embedded = true)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PrayerTimesContent(onBack: (() -> Unit)?, embedded: Boolean) {
     val ctx = LocalContext.current
     val s = remember { PrSettings(ctx) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -243,7 +253,7 @@ fun PrayerTimesScreen(onBack: (() -> Unit)? = null, footer: (androidx.compose.fo
     }
 
     PrTheme {
-        Scaffold(
+        if (!embedded) Scaffold(
             containerColor = PrC.bg,
             topBar = {
                 CenterAlignedTopAppBar(
@@ -302,11 +312,60 @@ fun PrayerTimesScreen(onBack: (() -> Unit)? = null, footer: (androidx.compose.fo
                         fontSize = 12.sp, color = PrC.text2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(), lineHeight = 18.sp,
                     )
                 }
-                // Embedded in «مركز الصديق» → «الأدوات»: the host's own items under the times (nothing above changes).
-                footer?.invoke(this)
+            }
+        } else {
+            // Embedded (opening screen and «الأدوات» in «مركز الصديق»): the same content, not a full screen: the title and settings
+            // as a small header row instead of the top bar, and no list of its own, so the host page scrolls it.
+            val (prev, next) = s.around(now)
+            val today = s.slots(now)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(PrC.bg).padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("مواقيت الصلاة", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = PrC.text, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, contentDescription = "الإعدادات", tint = PrC.accent) }
+                }
+                PrHeroCard(now, prev, next, s.zone)
+                run {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f, fill = false).clip(RoundedCornerShape(50)).background(PrC.soft).prPress { showPlaces = true }.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.LocationOn, null, tint = PrC.accent, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(s.place, color = PrC.accent, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Icon(Icons.Filled.ArrowDropDown, null, tint = PrC.accent)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Row(
+                            Modifier.clip(RoundedCornerShape(50)).background(PrC.gradient).prPress { locate() }.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (locating) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            else PrGlyph("pin", Color.White, 16.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("موقعي", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        }
+                    }
+                }
+                if (message.isNotEmpty()) Text(message, color = PrC.warn, fontSize = 13.sp)
+                run {
+                    PrCard(padding = 6.dp) {
+                        Column {
+                            today.forEach { sl ->
+                                val isNext = next != null && next.prayer == sl.prayer && next.time == sl.time
+                                PrRow(sl, isNext, sl.prayer.name in s.notify, s.zone) { toggleNotify(sl.prayer) }
+                            }
+                        }
+                    }
+                }
+                run {
+                    Text(
+                        "طريقة الحساب: ${s.method.name} · العصر: ${if (s.hanafi) "الحنفي" else "الجمهور (شافعي)"}\nالأوقات محسوبة على جهازك بدون إنترنت.",
+                        fontSize = 12.sp, color = PrC.text2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(), lineHeight = 18.sp,
+                    )
+                }
             }
         }
-
         if (showPlaces) PrPlacesSheet(s, locating, onLocate = { locate() }, onDismiss = { showPlaces = false }, onError = { message = it })
         if (showSettings) PrSettingsSheet(s, onDismiss = { showSettings = false })
     }

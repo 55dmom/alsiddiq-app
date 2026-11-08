@@ -155,6 +155,9 @@ fun LoginScreen() {
                 }
             }
         }
+        // His request (Nov 8): before any password, «مواقيت الصلاة» open and the tools under it (the same block as the «الأدوات» tab).
+        Spacer(Modifier.height(18.dp))
+        com.alsiddiq.app.ui.components.ToolsBlock(titleColor = Color.White)
         if (demo) {
             Spacer(Modifier.height(18.dp)); DemoBanner(); Spacer(Modifier.height(8.dp))
             Text("نسخة تجريبية: العرض ${DemoSeed.VIEWER_PASSWORD} • الإدارة ${DemoSeed.ADMIN_PASSWORD} • معلم ${DemoSeed.TEACHER_PASSWORD}",
