@@ -40,11 +40,13 @@ class ToolItem(val title: String, val sub: String, val icon: ImageVector, privat
 }
 
 object Tools {
+    /** Shown on its own at the top of the «الأدوات» tab. */
+    val prayer = ToolItem("مواقيت الصلاة", "الأوقات والإقامة والتنبيه، بدون إنترنت", Icons.Outlined.Mosque, { Brand.Orange }) { PrayerTimesActivity.start(it) }
     val all: List<ToolItem> = listOf(
         ToolItem("المصحف", "المصحف كامل، صفحة صفحة", Icons.Outlined.MenuBook, { Brand.Green }) { MushafActivity.start(it) },
         ToolItem("وضع الحفظ", "احفظ أي سورة أو مقطع وراجع محفوظك", Icons.Outlined.Bookmark, { Brand.Navy }) { HifzActivity.start(it) },
         ToolItem("الختمة", "خطة ختم القرآن ومتابعة وردك", Icons.Outlined.DateRange, { Brand.Maroon }) { KhatmaActivity.start(it) },
-        ToolItem("مواقيت الصلاة", "الأوقات والإقامة والتنبيه، بدون إنترنت", Icons.Outlined.Mosque, { Brand.Orange }) { PrayerTimesActivity.start(it) },
+        prayer,
         ToolItem("الأذكار", "أذكار الصباح والمساء وغيرها", Icons.Outlined.WbSunny, { Brand.Navy }) { AdhkarActivity.start(it) },
         ToolItem("الأدعية", "أدعية من القرآن والسنة", Icons.Outlined.VolunteerActivism, { Brand.Green }) { DuasActivity.start(it) },
         ToolItem("المسبحة", "عداد تسبيح وأذكار", Icons.Outlined.TouchApp, { Brand.Gold }) { TasbeehActivity.start(it) },
@@ -62,15 +64,47 @@ fun ToolsSheet(onDismiss: () -> Unit) {
     }
 }
 
-/** The «الأدوات» tab in the bottom bar: the same menu as the sheet, as a page (no password). */
+/**
+ * The «الأدوات» tab in the bottom bar (his layout, Nov 8): «مواقيت الصلاة» itself at the top (his own screen, embedded, no back arrow),
+ * then the other tools as buttons, in their order. One page that scrolls; no password.
+ */
 @Composable
 fun ToolsTabScreen() {
-    Box(Modifier.fillMaxSize().background(Brand.Card)) {
-        ToolsMenuContent(onDismiss = {}, Modifier.statusBarsPadding().padding(top = 18.dp, bottom = 20.dp))
-    }
+    val ctx = LocalContext.current
+    val others = Tools.all.filter { it !== Tools.prayer }
+    com.alsalmi.buttons.prayer.PrayerTimesScreen(onBack = null, footer = {
+        item(key = "tools_title") {
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.GridView, null, tint = Brand.Gold, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("الأدوات", style = MaterialTheme.typography.titleMedium, color = Brand.Navy)
+            }
+        }
+        others.chunked(3).forEachIndexed { r, row ->
+            item(key = "tools_row_$r") {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { t ->
+                        Surface(onClick = { t.open(ctx) }, shape = RoundedCornerShape(18.dp), color = Brand.Card, shadowElevation = 1.dp, modifier = Modifier.weight(1f).heightIn(min = 104.dp)) {
+                            Column(Modifier.padding(vertical = 14.dp, horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(t.color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                                    Icon(t.icon, null, tint = t.color)
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(t.title, style = MaterialTheme.typography.titleSmall, color = Brand.Ink, textAlign = TextAlign.Center, maxLines = 2)
+                            }
+                        }
+                    }
+                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+        item(key = "tools_themes") { ThemesEntry() }
+        item(key = "tools_about") { com.alsiddiq.app.ui.about.CenterInfoEntries() }
+        item(key = "tools_end") { Spacer(Modifier.height(8.dp)) }
+    })
 }
 
-/** The menu itself, shared by the sheet (opening screen) and the bottom-bar tab. */
+/** The menu itself (the sheet on the opening screen). */
 @Composable
 private fun ToolsMenuContent(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current

@@ -178,10 +178,11 @@ class PrayerBootReceiver : BroadcastReceiver() {
 /**
  * «مواقيت الصلاة» — the button's single entry composable.
  * @param onBack shows a back arrow in the top bar when not null.
+ * @param footer optional extra list items under the times, for a host page that embeds this screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrayerTimesScreen(onBack: (() -> Unit)? = null) {
+fun PrayerTimesScreen(onBack: (() -> Unit)? = null, footer: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null) {
     val ctx = LocalContext.current
     val s = remember { PrSettings(ctx) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -301,6 +302,8 @@ fun PrayerTimesScreen(onBack: (() -> Unit)? = null) {
                         fontSize = 12.sp, color = PrC.text2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(), lineHeight = 18.sp,
                     )
                 }
+                // Embedded in «مركز الصديق» → «الأدوات»: the host's own items under the times (nothing above changes).
+                footer?.invoke(this)
             }
         }
 

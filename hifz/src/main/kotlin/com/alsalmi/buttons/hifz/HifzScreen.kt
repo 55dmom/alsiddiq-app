@@ -104,7 +104,12 @@ fun HifzScreen(onBack: (() -> Unit)? = null) {
     val shownWords = remember { mutableStateMapOf<Int, Int>() }
     var picker by remember { mutableStateOf(false) }
     var progQ by remember { mutableStateOf("") }
-    fun resetView() { revealed.clear(); shownWords.clear() }
+    var reciteKey by remember { mutableIntStateOf(0) }
+    fun resetView() { revealed.clear(); shownWords.clear(); reciteKey++ }
+    // «تسميع»: the words of the whole range, in order, for the mic.
+    val recite = ayat?.let { data -> if (mode == 3) remember(s.surah, s.from, s.to, reciteKey) {
+        HfReciteState((s.from..s.to).flatMap { a -> val k = s.key(a); HfState.words(HfQuran.split(data, s.surah, a).second).map { k to it } })
+    } else null }
 
     HfTheme {
         Scaffold(
@@ -167,14 +172,16 @@ fun HifzScreen(onBack: (() -> Unit)? = null) {
                         }
                         item(key = "modes") {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                itemsIndexed(listOf("قراءة", "إخفاء الآيات", "اختبار الكلمات")) { i, t -> HfChip(t, mode == i) { mode = i; resetView() } }
+                                itemsIndexed(listOf("قراءة", "إخفاء الآيات", "اختبار الكلمات", "تسميع")) { i, t -> HfChip(t, mode == i) { mode = i; resetView() } }
                             }
                         }
+                        if (recite != null) item(key = "recite") { HfRecitePanel(recite) }
                         items((s.from..s.to).toList(), key = { "a${s.surah}_$it" }) { a ->
                             val k = s.key(a)
                             val sp = HfQuran.split(data, s.surah, a)
                             HfAyahCard(
-                                s, a, k, sp.first, sp.second, mode, k in revealed, shownWords[k] ?: 0,
+                                s, a, k, sp.first, sp.second, mode, k in revealed, recite?.shownIn(k) ?: (shownWords[k] ?: 0),
+                                missed = recite?.missedIn(k) ?: -1,
                                 onTapText = {
                                     if (mode == 1) { if (k in revealed) revealed.remove(k) else revealed.add(k) }
                                     if (mode == 2) shownWords[k] = minOf(HfState.words(sp.second).size, (shownWords[k] ?: 0) + 1)
@@ -272,6 +279,7 @@ private fun Counter(t: String, v: Int, minus: () -> Unit, plus: () -> Unit, canM
 private fun HfAyahCard(
     s: HfState, a: Int, k: Int, basmala: String?, text: String, mode: Int, revealed: Boolean, shown: Int,
     onTapText: () -> Unit, onWords: (Int) -> Unit, onBump: () -> Unit, onMem: () -> Unit, onWeak: () -> Unit, modifier: Modifier = Modifier,
+    missed: Int = -1,
 ) {
     val mem = k in s.memorised
     val weak = k in s.weak
@@ -303,7 +311,9 @@ private fun HfAyahCard(
                         val t = buildAnnotatedString {
                             words.forEachIndexed { i, w ->
                                 if (i > 0) append(' ')
-                                if (i < shown) append(w) else withStyle(SpanStyle(color = Color.Transparent, textDecoration = TextDecoration.Underline, background = HfC.soft)) { append(w) }
+                                if (i < shown) append(w)
+                                else if (i == missed) withStyle(SpanStyle(color = Color.Transparent, textDecoration = TextDecoration.Underline, background = HfC.warn.copy(alpha = 0.28f))) { append(w) }
+                                else withStyle(SpanStyle(color = Color.Transparent, textDecoration = TextDecoration.Underline, background = HfC.soft)) { append(w) }
                             }
                             if (shown >= words.size) append(" " + HfQuran.marker(a))
                         }
@@ -311,6 +321,7 @@ private fun HfAyahCard(
                     }
                 }
             }
+            if (mode == 3) Text("$shown/${words.size}", color = HfC.text2, fontSize = 12.sp)
             if (mode == 2) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Small("كلمة +") { onWords(minOf(words.size, shown + 1)) }

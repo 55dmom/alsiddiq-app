@@ -44,6 +44,17 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 
 internal val MsQuranFont = FontFamily(Font(R.font.amiri_quran))
 
@@ -53,16 +64,19 @@ internal class MsState(ctx: Context) {
         private set
     var bookmark by mutableIntStateOf(p.getInt("bookmark", 0))
         private set
-    var fontSize by mutableFloatStateOf(p.getFloat("font", 24f))
+    /** The reader's own size, as a factor of the page's fitted size (1 = the whole page fills the screen). Remembered on the phone. */
+    var zoom by mutableFloatStateOf(p.getFloat("zoom", 1f))
         private set
+    fun setZoomBy(f: Float, save: Boolean = true) { zoom = (zoom * f).coerceIn(0.6f, 2.5f); if (save) saveZoom() }
+    fun saveZoom() { p.edit().putFloat("zoom", zoom).apply() }
     fun setLast(v: Int) { lastPage = v; p.edit().putInt("last", v).apply() }
     fun toggleBookmark(page: Int): Boolean {
         bookmark = if (bookmark == page) 0 else page
         p.edit().putInt("bookmark", bookmark).apply()
         return bookmark == page
     }
-    fun bigger() { fontSize = minOf(44f, fontSize + 2f); p.edit().putFloat("font", fontSize).apply() }
-    fun smaller() { fontSize = maxOf(18f, fontSize - 2f); p.edit().putFloat("font", fontSize).apply() }
+    fun bigger() = setZoomBy(1.08f)
+    fun smaller() = setZoomBy(1f / 1.08f)
     fun surahOfPage(page: Int) = MsQuran.pages[(page - 1).coerceIn(0, 603)] / 1000
     fun juzOfPage(page: Int): Int { val k = MsQuran.pages[(page - 1).coerceIn(0, 603)]; return MsQuran.juzOf(k / 1000, k % 1000) }
 }
@@ -245,7 +259,7 @@ private fun MsReader(s: MsState, start: Int, onClose: () -> Unit) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center), color = MsC.accent)
             } else {
                 HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { idx ->
-                    MsPage(data, idx + 1, s.fontSize)
+                    MsPage(data, idx + 1, s)
                 }
             }
             Row(
@@ -269,23 +283,87 @@ private fun MsReader(s: MsState, start: Int, onClose: () -> Unit) {
 }
 
 @Composable
-private fun MsPage(ayat: Array<Array<String>>, page: Int, fontSize: Float) {
+private fun MsPage(ayat: Array<Array<String>>, page: Int, s: MsState) {
     val segs = remember(page) { msSegments(ayat, page) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row {
-            Text("سورة ${MsQuran.suras[MsQuran.pages[page - 1] / 1000 - 1].first}", color = MsC.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text("$page", color = MsC.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        }
-        segs.forEach { g ->
-            if (g.header) {
-                Text("سورة ${MsQuran.suras[g.surah - 1].first}", color = MsC.accent, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MsC.soft).border(1.dp, MsC.gold.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).padding(vertical = 10.dp))
-                g.basmala?.let { b -> Text(b, fontFamily = MsQuranFont, fontSize = fontSize.sp, color = MsC.text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
-            } else {
-                Text(g.text, fontFamily = MsQuranFont, fontSize = fontSize.sp, lineHeight = (fontSize * 2.1f).sp, color = MsC.text, textAlign = TextAlign.Justify, modifier = Modifier.fillMaxWidth())
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val base = LocalTextStyle.current
+    BoxWithConstraints(Modifier.fillMaxSize().msPinch(s)) {
+        val wPx = with(density) { (maxWidth - 36.dp).roundToPx() }.coerceAtLeast(1)
+        // Room for the text: the page minus its padding, the small top line, and the bottom slider bar.
+        val hPx = with(density) { (maxHeight - 16.dp - MsBottomBar).roundToPx() }.coerceAtLeast(1)
+        val fit = remember(page, wPx, hPx, density, base) { msFitSize(measurer, density, base, segs, page, wPx, (hPx * 0.98f).toInt()) }
+        val fontSize = (fit * s.zoom).coerceIn(10f, 90f)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(MsGap)) {
+            Row {
+                Text("سورة ${MsQuran.suras[MsQuran.pages[page - 1] / 1000 - 1].first}", color = MsC.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("$page", color = MsC.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
+            segs.forEach { g ->
+                if (g.header) {
+                    Text("سورة ${MsQuran.suras[g.surah - 1].first}", color = MsC.accent, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MsC.soft).border(1.dp, MsC.gold.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).padding(vertical = 10.dp))
+                    g.basmala?.let { b -> Text(b, style = base.merge(msBasmalaStyle(fontSize)), color = MsC.text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
+                } else {
+                    Text(g.text, style = base.merge(msAyahStyle(fontSize)), color = MsC.text, textAlign = TextAlign.Justify, modifier = Modifier.fillMaxWidth())
+                }
+            }
+            // Only when the reader made it bigger than the page: room to scroll past the slider bar.
+            if (s.zoom > 1.001f) Spacer(Modifier.height(MsBottomBar))
         }
-        Spacer(Modifier.height(80.dp))
+    }
+}
+
+private val MsGap = 12.dp
+private val MsBottomBar = 76.dp
+
+private fun msAyahStyle(size: Float) = TextStyle(fontFamily = MsQuranFont, fontSize = size.sp, lineHeight = (size * 2.1f).sp)
+private fun msBasmalaStyle(size: Float) = TextStyle(fontFamily = MsQuranFont, fontSize = size.sp)
+
+/** The largest Quran font size (sp) at which the whole page fits the screen without scrolling. Layout only: the text is measured as it is. */
+private fun msFitSize(m: TextMeasurer, d: Density, base: TextStyle, segs: List<MsSeg>, page: Int, wPx: Int, hPx: Int): Float {
+    val c = Constraints(maxWidth = wPx)
+    fun h(t: String, st: TextStyle) = m.measure(t, base.merge(st), constraints = c, layoutDirection = LayoutDirection.Rtl, density = d).size.height
+    val gap = with(d) { MsGap.roundToPx() }
+    val top = h("سورة ${MsQuran.suras[MsQuran.pages[page - 1] / 1000 - 1].first}", TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+    var fixed = top
+    var items = 1
+    segs.forEach { g ->
+        if (g.header) {
+            fixed += h("سورة ${MsQuran.suras[g.surah - 1].first}", TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)) + with(d) { 20.dp.roundToPx() }
+            items++
+            if (g.basmala != null) items++
+        } else items++
+    }
+    fixed += gap * (items - 1)
+    fun height(size: Float): Int {
+        var sum = fixed
+        segs.forEach { g ->
+            if (g.header) { g.basmala?.let { b -> sum += h(b, msBasmalaStyle(size).copy(textAlign = TextAlign.Center)) } }
+            else sum += h(g.text, msAyahStyle(size).copy(textAlign = TextAlign.Justify))
+        }
+        return sum
+    }
+    var lo = 10f; var hi = 44f
+    if (height(hi) <= hPx) return hi
+    if (height(lo) > hPx) return lo
+    repeat(9) { val mid = (lo + hi) / 2; if (height(mid) <= hPx) lo = mid else hi = mid }
+    return lo
+}
+
+/** Two fingers make the page bigger or smaller; one finger is left to the page swipe. */
+private fun Modifier.msPinch(s: MsState): Modifier = pointerInput(s) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        var pinched = false
+        do {
+            val ev = awaitPointerEvent()
+            if (ev.changes.count { it.pressed } >= 2) {
+                val z = ev.calculateZoom()
+                if (z != 1f) { s.setZoomBy(z, save = false); pinched = true; ev.changes.forEach { it.consume() } }
+            }
+        } while (ev.changes.any { it.pressed })
+        if (pinched) s.saveZoom()
     }
 }
 

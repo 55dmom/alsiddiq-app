@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.material.icons.filled.Share
@@ -54,10 +55,40 @@ import kotlinx.coroutines.delay
 internal object CtInfo {
     const val TITLE = "تواصل مع المطوّر"
     const val SUBTITLE = "تواصل معنا"
-    const val BODY = "راسلنا على قناة تفاؤل في تيليجرام: اقتراح، سؤال، أو استفسار."
-    const val BUTTON = "افتح قناة تفاؤل في تيليجرام"
-    const val LINK = "t.me/tafaulapp"
-    const val URL = "https://t.me/tafaulapp"
+    const val BODY = "راسلني على أي وحدة منها: اقتراح، سؤال، أو استفسار."
+    // His three contacts (Nov 8): Instagram, e-mail, and his personal Telegram account (not the channel).
+    const val INSTAGRAM = "INSTAGRAM_USER"
+    const val EMAIL = "EMAIL_ADDRESS"
+    const val TELEGRAM = "TELEGRAM_USER"
+}
+
+/** One contact row: label, what is shown, the link it opens, and what «نسخ» copies. */
+internal class CtLink(val label: String, val shown: String, val url: String, val copy: String, val color: Color, val icon: @Composable (Color) -> Unit)
+
+internal val Instagram = Color(0xFFD62976)
+internal val EmailColor = Color(0xFFB0532F)
+
+/** A simple Instagram-style camera outline (rounded square, lens, dot), drawn here so no brand asset is needed. */
+internal val InstaIcon: ImageVector by lazy {
+    ImageVector.Builder("insta", 24.dp, 24.dp, 24f, 24f).addPath(
+        addPathNodes("M7.5,2h9A5.5,5.5 0,0 1,22 7.5v9a5.5,5.5 0,0 1,-5.5 5.5h-9A5.5,5.5 0,0 1,2 16.5v-9A5.5,5.5 0,0 1,7.5 2zM7.5,4A3.5,3.5 0,0 0,4 7.5v9A3.5,3.5 0,0 0,7.5 20h9a3.5,3.5 0,0 0,3.5 -3.5v-9A3.5,3.5 0,0 0,16.5 4zM12,7a5,5 0,1 1,0 10a5,5 0,1 1,0 -10zM12,9a3,3 0,1 0,0 6a3,3 0,1 0,0 -6zM17.3,5.4a1.3,1.3 0,1 1,0 2.6a1.3,1.3 0,1 1,0 -2.6z"),
+        fill = SolidColor(Color.Black),
+    ).build()
+}
+
+internal fun ctLinks(): List<CtLink> {
+    val ig = CtInfo.INSTAGRAM.trim().removePrefix("@")
+    val tg = CtInfo.TELEGRAM.trim().removePrefix("@")
+    val mail = CtInfo.EMAIL.trim()
+    return listOf(
+        CtLink("انستجرام", "@$ig", "https://instagram.com/$ig", "@$ig", Instagram) { Icon(InstaIcon, null, tint = it, modifier = Modifier.size(24.dp)) },
+        CtLink("الإيميل", mail, "mailto:$mail", mail, EmailColor) { Icon(Icons.Filled.Email, null, tint = it, modifier = Modifier.size(24.dp)) },
+        CtLink("تيليجرام", "@$tg", "https://t.me/$tg", "@$tg", Telegram) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Icon(Icons.AutoMirrored.Filled.Send, null, tint = it, modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = -25f })
+            }
+        },
+    )
 }
 
 /** Material "content_copy" glyph (Apache-2.0), kept here so the module needs only icons-core. */
@@ -84,19 +115,14 @@ internal fun ctColors(dark: Boolean = isSystemInDarkTheme()) = if (dark) CtColor
     text = Color(0xFF111827), sub = Color(0xFF5B6472), grad1 = Color(0xFF2AA1DE), grad2 = Color(0xFF1C7FC0),
 )
 
-internal fun openTelegram(ctx: Context) {
-    val i = Intent(Intent.ACTION_VIEW, Uri.parse(CtInfo.URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { ctx.startActivity(i) }
+internal fun openLink(ctx: Context, url: String) {
+    val i = if (url.startsWith("mailto:")) Intent(Intent.ACTION_SENDTO, Uri.parse(url)) else Intent(Intent.ACTION_VIEW, Uri.parse(url))
+    runCatching { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
-internal fun copyLink(ctx: Context) {
+internal fun copyText(ctx: Context, text: String) {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    cm?.setPrimaryClip(ClipData.newPlainText(CtInfo.TITLE, CtInfo.URL))
-}
-
-internal fun shareLink(ctx: Context) {
-    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, CtInfo.URL)
-    runCatching { ctx.startActivity(Intent.createChooser(send, "مشاركة الرابط").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    cm?.setPrimaryClip(ClipData.newPlainText(CtInfo.TITLE, text))
 }
 
 /**
@@ -111,8 +137,9 @@ fun ContactDeveloperScreen(onBack: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     var appeared by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf(false) }
+    var copiedKey by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { appeared = true }
-    LaunchedEffect(copied) { if (copied) { delay(1800); copied = false } }
+    LaunchedEffect(copied) { if (copied) { delay(1800); copied = false; copiedKey = "" } }
     val heroScale by animateFloatAsState(if (appeared) 1f else 0.6f, spring(dampingRatio = 0.6f, stiffness = 300f), label = "hs")
     val cardShift by animateDpAsState(if (appeared) 0.dp else 24.dp, spring(dampingRatio = 0.8f, stiffness = 300f), label = "cs")
     val fade by animateFloatAsState(if (appeared) 1f else 0f, tween(450), label = "fa")
@@ -177,23 +204,10 @@ fun ContactDeveloperScreen(onBack: (() -> Unit)? = null) {
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
                             Text(CtInfo.BODY, color = c.sub, fontSize = 16.sp, textAlign = TextAlign.Center, lineHeight = 24.sp)
-                            PressButton(onClick = { openTelegram(ctx) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), bg = Telegram, shape = RoundedCornerShape(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = -25f })
-                                    }
-                                    Text(CtInfo.BUTTON, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            ctLinks().forEach { l ->
+                                ContactRow(l, c, copied = copiedKey == l.label, onOpen = { openLink(ctx, l.url) }) {
+                                    copyText(ctx, l.copy); copiedKey = l.label; copied = true
                                 }
-                            }
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                                Text(CtInfo.LINK, color = c.sub, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-                            }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                SmallAction(
-                                    icon = if (copied) Icons.Filled.Check else CopyIcon,
-                                    title = if (copied) "انتسخ" else "نسخ الرابط", c = c, modifier = Modifier.weight(1f),
-                                ) { copyLink(ctx); copied = true }
-                                SmallAction(icon = Icons.Filled.Share, title = "مشاركة الرابط", c = c, modifier = Modifier.weight(1f)) { shareLink(ctx) }
                             }
                         }
                         Text("ما يُحفظ أي شي، وبدون حسابات أو نماذج.", color = c.sub, fontSize = 13.sp, textAlign = TextAlign.Center)
@@ -209,7 +223,7 @@ fun ContactDeveloperScreen(onBack: (() -> Unit)? = null) {
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Text("تم نسخ الرابط", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("تم النسخ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -225,6 +239,26 @@ private fun PressButton(onClick: () -> Unit, modifier: Modifier, bg: Color, shap
     val s by animateFloatAsState(if (pressed) 0.96f else 1f, spring(dampingRatio = 0.6f), label = "pb")
     Surface(onClick = onClick, modifier = modifier.scale(s), shape = shape, color = bg, interactionSource = src) {
         Box(contentAlignment = Alignment.Center) { content() }
+    }
+}
+
+@Composable
+private fun ContactRow(l: CtLink, c: CtColors, copied: Boolean, onOpen: () -> Unit, onCopy: () -> Unit) {
+    PressButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), bg = c.soft.copy(alpha = 0.55f), shape = RoundedCornerShape(16.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(l.color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { l.icon(l.color) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(l.label, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Text(l.shown, color = c.sub, fontSize = 13.sp, maxLines = 1, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End)
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            IconButton(onClick = onCopy) {
+                Icon(if (copied) Icons.Filled.Check else CopyIcon, contentDescription = "نسخ", tint = l.color, modifier = Modifier.size(20.dp))
+            }
+        }
     }
 }
 

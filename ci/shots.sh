@@ -83,17 +83,53 @@ tapt "الأدوات"; sleep 2.5; adb exec-out screencap -p > shots/50a_admin_to
 tapt "المصحف"; sleep 5; adb exec-out screencap -p > shots/50a2_admin_tools_mushaf.png
 shot 50b_teacher_home_bar teacher home 14
 shot 50c_viewer_home_bar viewer home 14
-shot 50d_tools_tab_admin admin tools
-shot 50e_tools_tab_teacher teacher tools
-shot 50f_tools_tab_viewer viewer tools
-adb shell input swipe 540 1800 540 500 400; sleep 1.5; adb exec-out screencap -p > shots/50g_tools_tab_viewer_bottom.png
+shot 50d_tools_tab_admin admin tools 14
+adb shell input swipe 540 1900 540 400 500; sleep 1.5; adb exec-out screencap -p > shots/50d2_tools_tab_admin_grid.png
+adb shell input swipe 540 1900 540 400 500; sleep 1.5; adb exec-out screencap -p > shots/50d3_tools_tab_admin_bottom.png
+tapt "الأذكار"; sleep 5; adb exec-out screencap -p > shots/50d4_tools_tab_opened_adhkar.png
+shot 50e_tools_tab_teacher teacher tools 14
+shot 50f_tools_tab_viewer viewer tools 14
 st 50h_tools_tab_night night --es demo_login admin --es route tools
+# المصحف: each page fits the screen at the default size (large phone here, then 360dp and 480dp below)
+MS() { adb shell run-as $PKG rm -f shared_prefs/alsalmi_mushaf.xml >/dev/null 2>&1; }
+MS; st 52_mushaf_p1 default --es open_tool mushaf_page --es page 1
+st 52b_mushaf_p3 default --es open_tool mushaf_page --es page 3
+st 52c_mushaf_p106 default --es open_tool mushaf_page --es page 106
+st 52d_mushaf_p582 default --es open_tool mushaf_page --es page 582
+tapt "أ+"; sleep 0.6; tapt "أ+"; sleep 0.6; tapt "أ+"; sleep 1.5; adb exec-out screencap -p > shots/52e_mushaf_p582_bigger.png
+adb shell input swipe 540 1700 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/52f_mushaf_p582_bigger_scrolled.png
+st 52g_mushaf_p583_keeps_size default --es open_tool mushaf_page --es page 583
+MS
+# وضع الحفظ ← «تسميع» (the emulator has no real speech recognition: this shows the mode, the mic and the messages)
+adb shell pm revoke $PKG android.permission.RECORD_AUDIO >/dev/null 2>&1
+st 53_hifz default --es open_tool hifz
+tapt "تسميع"; sleep 2; adb exec-out screencap -p > shots/53b_hifz_recite.png
+adb shell input swipe 540 1700 540 900 400; sleep 1.5; adb exec-out screencap -p > shots/53c_hifz_recite_scrolled.png
+adb shell input swipe 540 900 540 1700 400; sleep 1; tapt "تسميع"; sleep 1
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep -c "text=" > shots/53_ui_count.txt
+adb exec-out screencap -p > shots/53d_hifz_recite_before_mic.png
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep 'content-desc="المايك"' | tail -1 | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/' > /tmp/b.txt
+read a b c d < /tmp/b.txt; [ -n "$d" ] && adb shell input tap $(( (a+c)/2 )) $(( (b+d)/2 ))
+sleep 2.5; adb exec-out screencap -p > shots/53e_hifz_mic_tapped.png
+adb shell input keyevent 4; sleep 2; adb exec-out screencap -p > shots/53f_hifz_mic_after.png
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/53_hifz.crash.txt; [ -s shots/53_hifz.crash.txt ] || rm -f shots/53_hifz.crash.txt
 adb shell wm size 720x1280; adb shell wm density 320; sleep 2
 st 51_small_admin_home default --es demo_login admin --es route home
 st 51b_small_teacher_home default --es demo_login teacher --es route home
 st 51c_small_viewer_home default --es demo_login viewer --es route home
 st 51d_small_tools_tab default --es demo_login admin --es route tools
+adb shell input swipe 360 1150 360 250 500; sleep 1.5; adb exec-out screencap -p > shots/51e_small_tools_tab_grid.png
+MS; st 51f_small_mushaf_p1 default --es open_tool mushaf_page --es page 1
+st 51g_small_mushaf_p3 default --es open_tool mushaf_page --es page 3
+st 51h_small_mushaf_p106 default --es open_tool mushaf_page --es page 106
+st 51i_small_mushaf_p582 default --es open_tool mushaf_page --es page 582
+st 51j_small_teacher_tools default --es demo_login teacher --es route tools
 adb shell wm size reset; adb shell wm density reset
+adb shell wm density 360; sleep 2
+MS; st 51k_480dp_mushaf_p106 default --es open_tool mushaf_page --es page 106
+st 51l_480dp_mushaf_p3 default --es open_tool mushaf_page --es page 3
+adb shell wm density reset
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/50_tools_tab.crash.txt; [ -s shots/50_tools_tab.crash.txt ] || rm -f shots/50_tools_tab.crash.txt
 st 20_themes_picker default --es demo_login gate --ez open_themes true
 st 21_theme_emerald_gate emerald --es demo_login gate
