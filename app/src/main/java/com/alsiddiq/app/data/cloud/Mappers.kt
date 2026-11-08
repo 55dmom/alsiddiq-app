@@ -105,11 +105,12 @@ internal object Rows {
 
     fun announcement(o: JsonObject) = Announcement(
         id = o.s("id")!!, title = o.s("title") ?: "", body = o.s("body") ?: "", audience = enumOf(o.s("audience"), Audience.ALL),
-        createdBy = o.s("created_by") ?: "", createdAt = ts(o.s("created_at")), byName = o.s("by_name")
+        createdBy = o.s("created_by") ?: "", createdAt = ts(o.s("created_at")), byName = o.s("by_name"), imagePath = o.s("image_path")
     )
     fun announcementRow(a: Announcement, center: String) = buildJsonObject {
         put("id", a.id); put("center_id", center); put("title", a.title); put("body", a.body)
         put("audience", db(a.audience)); put("created_by", a.createdBy); put("created_at", iso(a.createdAt)); put("by_name", a.byName)
+        a.imagePath?.let { put("image_path", it) }   // v3.8 (only sent when there is a photo)
     }
 
     fun teacherName(o: JsonObject) = TeacherName(id = o.s("id")!!, name = o.s("name") ?: "", active = o.b("active") ?: true)

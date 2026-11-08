@@ -151,3 +151,16 @@ Shown on every home screen (admin, teacher, viewer) as a card «وسام الش�
 Separate from «المتفوقون».
 Note: a table `public.weekly_honors` (migration 0020) was created live (empty, 0 rows) before he chose «تلقائي»; it is unused —
 leave it, do not read or write it.
+
+## 8) A photo on an announcement (admin) — his words 10:24 PM «في الإعلانات إضافه صوره كمان من الاداره» (migration 0021, LIVE, 0 rows written)
+- Column `public.announcements.image_path text null` (existing announcements stay null). Check `announcements_image_path_chk`:
+  null or `<center_id>/announcements/<announcement id>/%`.
+- Restrictive insert policy `ann_image_admin`: a row WITH image_path only from the admin; teachers keep posting text-only as before.
+- Storage: the existing private bucket `student-photos`, path `<center_id>/announcements/<announcement id>/<8 chars>.jpg`.
+  Policies `annimg_insert` / `annimg_update` / `annimg_delete`: admin of that centre only. Read: the existing `sp_read`
+  (anyone signed in to the centre, viewer included). Other centres and anon: no access.
+- Client (Android): «إعلان جديد» (admin) has «صورة (اختياري)» with المعرض / الكاميرا / إزالة; the photo is reduced to 1280 px,
+  JPEG ≤ ~280 KB, uploaded FIRST (`POST /storage/v1/object/student-photos/<path>`; needs internet), then the announcement row is
+  inserted with `image_path`. Deleting the announcement also removes the object (best effort).
+- Display: full-width photo in the announcement card (tap = full screen), and a smaller one in the viewer home «آخر التقارير والإعلانات».
+- Rollback test: server_v33/rollback_test_v38g.txt (20 checks).

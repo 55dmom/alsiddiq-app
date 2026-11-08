@@ -932,7 +932,20 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         }
     }
 
+    override suspend fun postAnnouncementWithImage(a: Announcement, jpeg: ByteArray): Result<Announcement> = guarded {
+        require(me().role == Role.ADMIN)
+        if (a.title.isBlank()) throw ValidationError("اكتب عنوان الإعلان")
+        val id = a.id.ifBlank { newId() }
+        val path = "${center()}/announcements/$id/${UUID.randomUUID().toString().take(8)}.jpg"
+        net("رفع صورة الإعلان") { api.uploadObject(token(), "student-photos", path, jpeg) }
+        runCatching { photoFile(path).writeBytes(jpeg) }
+        postAnnouncement(a.copy(id = id, imagePath = path))
+    }
+
+    override suspend fun announcementImage(path: String): ByteArray? = studentPhoto(path)
+
     override suspend fun deleteAnnouncement(id: String): Result<Unit> = guarded {
+        st.cache.announcements.firstOrNull { it.id == id }?.imagePath?.let { p -> runCatching { api.deleteObject(token(), "student-photos", p) } }
         write(PendingOp(type = "delete", table = "announcements", filter = "id=eq.$id"), Unit) { d -> d.copy(announcements = d.announcements.filterNot { it.id == id }) }
     }
 

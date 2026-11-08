@@ -176,7 +176,9 @@ data class Announcement(
     val audience: Audience,
     val createdBy: String,
     val createdAt: Long = System.currentTimeMillis(),
-    val byName: String? = null
+    val byName: String? = null,
+    /** v3.8: optional photo by the admin (bucket student-photos, <center>/announcements/<id>/…). */
+    val imagePath: String? = null
 )
 
 @Serializable

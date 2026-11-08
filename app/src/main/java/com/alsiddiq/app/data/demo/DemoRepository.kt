@@ -463,6 +463,12 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         val ids = teacherIds.distinct(); val first = ids.firstOrNull()
         d.copy(circles = d.circles.map { if (it.id == circleId) it.copy(teacherId = first, teacherName = d.member(first)?.fullName, teacherIds = ids) else it }) to Unit
     }
+    override suspend fun postAnnouncementWithImage(a: Announcement, jpeg: ByteArray): Result<Announcement> {
+        val id = a.id.ifBlank { newId() }
+        val path = "demo/announcements/$id/${newId().take(8)}.jpg"
+        runCatching { File(photoDir, path.replace('/', '_')).writeBytes(jpeg) }
+        return postAnnouncement(a.copy(id = id, imagePath = path))
+    }
     override suspend fun circlePhoto(path: String): ByteArray? =
         if (path.startsWith("demo-seed/")) runCatching { context.resources.openRawResource(com.alsiddiq.app.R.drawable.home_bg_blur).use { it.readBytes() } }.getOrNull()
         else studentPhoto(path)

@@ -127,6 +127,9 @@ interface CenterRepository {
     /** jpeg = null removes it. Admin: any circle; a teacher: his own circle. */
     suspend fun setCirclePhoto(circleId: String, jpeg: ByteArray?): Result<Unit> = Result.failure(UnsupportedOperationException())
     suspend fun circlePhoto(path: String): ByteArray? = null
+    /** v3.8: the admin posts an announcement with a photo (online: the photo uploads first). */
+    suspend fun postAnnouncementWithImage(a: Announcement, jpeg: ByteArray): Result<Announcement> = Result.failure(UnsupportedOperationException())
+    suspend fun announcementImage(path: String): ByteArray? = circlePhoto(path)
 }
 
 data class ReauthTarget(val id: String, val name: String, val role: Role, val waiting: Int)

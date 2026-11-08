@@ -130,6 +130,7 @@ fun ViewerHome(user: Member, nav: NavHostController) {
                     AppCard(onClick = { nav.navigate("announcements") }, padding = 12.dp) {
                         Text(a.title, style = MaterialTheme.typography.titleSmall)
                         Text(a.body, style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        a.imagePath?.let { p -> Spacer(Modifier.height(6.dp)); AnnouncementImage(p, a.title, maxHeight = 150.dp) }
                         Text(Fmt.relative(a.createdAt), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                     }
                 }

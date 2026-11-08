@@ -9,7 +9,7 @@ import kotlin.random.Random
 
 /** Sample data for design and testing only. Never used once the central database is connected. */
 object DemoSeed {
-    const val VERSION = 11
+    const val VERSION = 12
     /** Demo passwords (sample data only): general view, admin, and (v3.3) each teacher's own password. */
     const val VIEWER_PASSWORD = "111111"
     const val ADMIN_PASSWORD = "222222"
@@ -97,7 +97,7 @@ object DemoSeed {
         }
         val now = System.currentTimeMillis()
         val announcements = listOf(
-            Announcement("n1", "مسابقة الحفظ الشهرية", "تبدأ مسابقة المركز الشهرية يوم الخميس القادم بعد العصر، والجوائز للمراكز الثلاثة الأولى في كل حلقة.", Audience.ALL, admin.id, now - 2 * 86_400_000L),
+            Announcement("n1", "مسابقة الحفظ الشهرية", "تبدأ مسابقة المركز الشهرية يوم الخميس القادم بعد العصر، والجوائز للمراكز الثلاثة الأولى في كل حلقة.", Audience.ALL, admin.id, now - 2 * 86_400_000L, imagePath = "demo-seed/announcement_n1.jpg"),
             Announcement("n2", "تقرير حلقة أبي بكر الصديق — أمس", "الحضور: 4 من 5\nالغائبون: زياد القرني\nالحفظ الجديد: 23 آية\nالمراجعة: 40 آية", Audience.ALL, tAcc.id, now - 86_400_000L, byName = n1),
             Announcement("n3", "تحديث خطة المراجعة", "اعتماد مراجعة جزء كامل أسبوعياً لطلاب الحلقات المتقدمة.", Audience.TEACHERS, admin.id, now - 6 * 86_400_000L)
         )
