@@ -1,4 +1,4 @@
-// access — the only door into «مركز الصديق» v3.
+// access — the only door into «مركز الصديق» v3 (v3.1: one shared teachers' password for all circles).
 // One password field: the server works out whose password it is (viewer / admin / which teacher),
 // by bcrypt-comparing it with the hashes Supabase Auth stores, then returns that account's session.
 // Passwords are never stored or compared in the app. The service key exists only here, on the server.
@@ -74,9 +74,19 @@ async function circlesOf(center: string, teacher: string) {
   const r = await rest("GET", `circles?select=id&center_id=eq.${center}&teacher_id=eq.${teacher}`);
   return Array.isArray(r.data) ? r.data.map((c: any) => c.id) : [];
 }
+async function allCircles(center: string) {
+  const r = await rest("GET", `circles?select=id&center_id=eq.${center}`);
+  return Array.isArray(r.data) ? r.data.map((c: any) => c.id) : [];
+}
 async function profileOut(center: string, p: any) {
+  // v3.1: the shared teachers' account ('teachers') opens every circle of the centre.
+  const circle_ids = p.access_kind === "teachers" ? await allCircles(center)
+                   : p.access_kind === "teacher" ? await circlesOf(center, p.id) : [];
   return { id: p.id, full_name: p.full_name, role: p.role, access_kind: p.access_kind,
-           circle_ids: p.access_kind === "teacher" ? await circlesOf(center, p.id) : [] };
+           all_circles: p.access_kind === "teachers", circle_ids };
+}
+async function activeOf(center: string, kind: string) {
+  return (await accounts(center, kind)).find((a: any) => a.active);
 }
 /** The caller's v3 profile from their access token, or null. */
 async function caller(req: Request) {
@@ -113,7 +123,8 @@ Deno.serve(async (req) => {
 
     if (action === "status") {
       const admins = center ? await accounts(center.id, "admin") : [];
-      return out(200, { needs_setup: admins.length === 0, center_name: center?.name ?? "" });
+      const teachers = center ? await activeOf(center.id, "teachers") : undefined;
+      return out(200, { needs_setup: admins.length === 0, center_name: center?.name ?? "", has_teachers_password: !!teachers });
     }
 
     // First run: centre name + admin password + general (viewer) password. Only while no admin password exists.
@@ -121,15 +132,21 @@ Deno.serve(async (req) => {
       if (center && (await accounts(center.id, "admin")).length > 0) return out(403, { error: "تم إعداد المركز مسبقاً" });
       const name = clean(body.center_name) || "مركز الصديق لتعليم القرآن الكريم";
       const apw = normPw(body.admin_password), vpw = normPw(body.viewer_password);
-      const bad = checkPw(apw) ?? checkPw(vpw);
+      const tpw = body.teachers_password ? normPw(body.teachers_password) : "";   // v3.1, optional for old clients
+      const bad = checkPw(apw) ?? checkPw(vpw) ?? (tpw ? checkPw(tpw) : null);
       if (bad) return out(400, { error: bad });
       if (apw === vpw) return out(400, { error: "كلمة سر الإدارة يجب أن تختلف عن كلمة السر العامة" });
+      if (tpw && (tpw === apw || tpw === vpw)) return out(400, { error: "كلمة سر المعلمين يجب أن تختلف عن كلمة سر الإدارة والكلمة العامة" });
       let c = center;
       if (c) { await rest("PATCH", `centers?id=eq.${c.id}`, { name }); }
       else { const r = await rest("POST", "centers", { name }); if (!r.ok) throw new Error(errMsg(r.data)); c = r.data[0]; }
       for (const old of await accounts(c.id, "viewer")) await rest("PATCH", `profiles?id=eq.${old.id}`, { active: false });
       const admin = await newAccount(c.id, "admin", "admin", "الإدارة", apw);
       await newAccount(c.id, "viewer", "viewer", "عرض عام", vpw);
+      if (tpw) {
+        for (const old of await accounts(c.id, "teachers")) await rest("PATCH", `profiles?id=eq.${old.id}`, { active: false });
+        await newAccount(c.id, "teachers", "teacher", "المعلمون", tpw);
+      }
       const s = await sessionFor((await call("GET", `/auth/v1/admin/users/${admin.id}`)).data.email, apw);
       return out(200, { session: s, profile: await profileOut(c.id, admin), center_name: name });
     }
@@ -147,7 +164,7 @@ Deno.serve(async (req) => {
         await sleep(1200);
         return out(401, { error: "كلمة السر غير صحيحة" });
       }
-      const order = ["admin", "teacher", "viewer"];
+      const order = ["admin", "teachers", "teacher", "viewer"];
       found.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
       const m = found[0];
       await logAttempt(ip, kind, true);
@@ -160,14 +177,15 @@ Deno.serve(async (req) => {
     const me = await caller(req);
     if (!me || me.access_kind !== "admin" || !center || me.center_id !== center.id) return out(403, { error: "هذه العملية للإدارة فقط" });
 
-    if (action === "set_password") {             // target: "viewer" | "admin"
-      const target = body.target === "admin" ? "admin" : body.target === "viewer" ? "viewer" : null;
+    if (action === "set_password") {             // target: "viewer" | "admin" | "teachers" (v3.1)
+      const target = ["admin", "viewer", "teachers"].includes(body.target) ? body.target : null;
       if (!target) return out(400, { error: "طلب غير صالح" });
       const pw = normPw(body.password); const bad = checkPw(pw); if (bad) return out(400, { error: bad });
-      const acc = target === "admin" ? me : (await accounts(center.id, "viewer")).find((a: any) => a.active);
+      const acc = target === "admin" ? me : await activeOf(center.id, target);
       if (await passwordTaken(center.id, pw, acc?.id)) return out(409, { error: "كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها" });
-      if (acc) await setPassword(acc.id, pw);
-      else await newAccount(center.id, "viewer", "viewer", "عرض عام", pw);
+      if (acc) await setPassword(acc.id, pw);   // also ends every session of that account
+      else if (target === "viewer") await newAccount(center.id, "viewer", "viewer", "عرض عام", pw);
+      else await newAccount(center.id, "teachers", "teacher", "المعلمون", pw);
       return out(200, { ok: true });
     }
 
