@@ -64,25 +64,24 @@ import androidx.compose.ui.unit.sp
 
 /** This button's own colours. */
 internal object AdkC {
-    val accent: Color @Composable get() = LocalAdkHost.current?.accent ?: (if (adkDark()) Color(0xFF2DD4BF) else Color(0xFF0F766E))
-    val accent2: Color @Composable get() = LocalAdkHost.current?.accent2 ?: (if (adkDark()) Color(0xFF0EA5E9) else Color(0xFF0E7490))
-    val bg: Color @Composable get() = LocalAdkHost.current?.bg ?: (if (adkDark()) Color(0xFF0B0E12) else Color(0xFFF3F5F7))
-    val card: Color @Composable get() = LocalAdkHost.current?.card ?: (if (adkDark()) Color(0xFF161A20) else Color.White)
-    val line: Color @Composable get() = LocalAdkHost.current?.line ?: (if (adkDark()) Color(0xFF262C35) else Color(0xFFE4E8EE))
-    val soft: Color @Composable get() = LocalAdkHost.current?.soft ?: (if (adkDark()) Color(0xFF1A3F3F) else Color(0xFFE2EEED))
-    val text: Color @Composable get() = LocalAdkHost.current?.text ?: (if (adkDark()) Color(0xFFE8ECF1) else Color(0xFF141A21))
-    val text2: Color @Composable get() = LocalAdkHost.current?.text2 ?: (if (adkDark()) Color(0xFF9AA4B1) else Color(0xFF5E6874))
-    val gold: Color @Composable get() = if (adkDark()) Color(0xFFF2C14E) else Color(0xFFB7791F)
-    val good: Color @Composable get() = if (adkDark()) Color(0xFF4ADE80) else Color(0xFF15803D)
-    val warn: Color @Composable get() = if (adkDark()) Color(0xFFFB923C) else Color(0xFFC2410C)
-    val gradient: Brush @Composable get() = LocalAdkHost.current?.let { Brush.linearGradient(listOf(it.grad1, it.grad2)) } ?: (if (adkDark()) Brush.linearGradient(listOf(Color(0xFF0C645D), Color(0xFF0B627A))) else Brush.linearGradient(listOf(Color(0xFF0F766E), Color(0xFF0E7490))))
+    val accent: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF2DD4BF) else Color(0xFF0F766E)
+    val accent2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF0EA5E9) else Color(0xFF0E7490)
+    val bg: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF0B0E12) else Color(0xFFF3F5F7)
+    val card: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF161A20) else Color.White
+    val line: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF262C35) else Color(0xFFE4E8EE)
+    val soft: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF1A3F3F) else Color(0xFFE2EEED)
+    val text: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFE8ECF1) else Color(0xFF141A21)
+    val text2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF9AA4B1) else Color(0xFF5E6874)
+    val gold: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFF2C14E) else Color(0xFFB7791F)
+    val good: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF4ADE80) else Color(0xFF15803D)
+    val warn: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFFB923C) else Color(0xFFC2410C)
+    val gradient: Brush @Composable get() = if (isSystemInDarkTheme()) Brush.linearGradient(listOf(Color(0xFF0C645D), Color(0xFF0B627A))) else Brush.linearGradient(listOf(Color(0xFF0F766E), Color(0xFF0E7490)))
 }
 
 /** Light / dark follow the system, Arabic RTL. */
 @Composable
 internal fun AdkTheme(content: @Composable () -> Unit) {
-    val host = adkHostRead()
-    val dark = host?.dark ?: isSystemInDarkTheme()
+    val dark = isSystemInDarkTheme()
     val scheme = if (dark) darkColorScheme(
         primary = Color(0xFF2DD4BF), onPrimary = Color(0xFF06121A),
         primaryContainer = Color(0xFF1A3F3F), onPrimaryContainer = Color(0xFFE8ECF1),
@@ -102,15 +101,9 @@ internal fun AdkTheme(content: @Composable () -> Unit) {
         surfaceContainer = Color.White, surfaceContainerHigh = Color.White,
         outlineVariant = Color(0xFFE4E8EE),
     )
-    val themed = if (host == null) scheme else scheme.copy(
-        primary = host.accent, onPrimary = if (host.dark) Color(0xFF0E1016) else Color.White,
-        primaryContainer = host.soft, onPrimaryContainer = host.text, secondary = host.accent2,
-        background = host.bg, onBackground = host.text, surface = host.bg, onSurface = host.text,
-        surfaceVariant = host.card, onSurfaceVariant = host.text2, surfaceContainer = host.card, outlineVariant = host.line,
-    )
-    CompositionLocalProvider(LocalAdkHost provides host) { MaterialTheme(colorScheme = themed) {
+    MaterialTheme(colorScheme = scheme) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { content() }
-    } }
+    }
 }
 
 /** Gentle shrink while pressed, then onClick. */
@@ -278,22 +271,3 @@ internal object AdkHaptics {
     fun tap(v: View) { v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
     fun success(v: View) { v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) }
 }
-
-
-// ===== «الثيمات» من تطبيق «مركز الصديق»: طبقة الألوان فقط، النصوص والمنطق ما تغيّرت.
-// التطبيق يكتب ألوان الثيم المختار (أو ثيم المناسبة) في «alsiddiq_theme». الثيم الأصلي أو بدون اختيار = ألوان هذا الزر الأصلية كما هي.
-internal class AdkHostColors(val dark: Boolean, val accent: Color, val accent2: Color, val bg: Color, val card: Color, val line: Color, val soft: Color, val text: Color, val text2: Color, val grad1: Color, val grad2: Color)
-internal val LocalAdkHost = androidx.compose.runtime.staticCompositionLocalOf<AdkHostColors?> { null }
-/** Reads the colours the app wrote for its tools (only when a theme other than the original is in force). */
-internal fun adkHostFrom(sp: android.content.SharedPreferences): AdkHostColors? {
-    if (!sp.getBoolean("tools_on", false)) return null
-    fun c(k: String) = Color(sp.getInt(k, 0))
-    return AdkHostColors(sp.getBoolean("t_dark", false), c("t_accent"), c("t_accent2"), c("t_bg"), c("t_card"), c("t_line"), c("t_soft"), c("t_text"), c("t_text2"), c("t_grad1"), c("t_grad2"))
-}
-@Composable
-internal fun adkHostRead(): AdkHostColors? {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    return androidx.compose.runtime.remember { adkHostFrom(ctx.getSharedPreferences("alsiddiq_theme", android.content.Context.MODE_PRIVATE)) }
-}
-@Composable
-internal fun adkDark(): Boolean = LocalAdkHost.current?.dark ?: isSystemInDarkTheme()

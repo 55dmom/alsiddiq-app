@@ -123,7 +123,8 @@ private fun GateFrame(onBack: (() -> Unit)? = null, tools: Boolean = false, cont
                 Box(Modifier.matchParentSize().background(Brush.radialGradient(listOf(GateGold[1].copy(alpha = 0.32f), Color.Transparent))))
                 Box(Modifier.size(140.dp).clip(CircleShape).background(Brush.sweepGradient(GateGold + GateGold.first())).padding(3.dp)
                     .clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-                    Image(painterResource(R.drawable.logo), "شعار مركز الصديق", Modifier.size(112.dp))
+                    // the logo as a round white disc (logo_disc: his logo, scaled to fit inside the circle with padding), wholly inside the gold ring
+                    Image(painterResource(R.drawable.logo_disc), "شعار مركز الصديق", Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
                 }
             }
             Spacer(Modifier.height(10.dp))

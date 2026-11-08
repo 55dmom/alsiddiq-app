@@ -64,26 +64,25 @@ import androidx.compose.ui.unit.sp
 
 /** This button's own colours. */
 internal object KhC {
-    val accent: Color @Composable get() = LocalKhHost.current?.accent ?: (if (khDark()) Color(0xFFF59E0B) else Color(0xFFB45309))
-    val accent2: Color @Composable get() = LocalKhHost.current?.accent2 ?: (if (khDark()) Color(0xFFFB923C) else Color(0xFFC2410C))
-    val bg: Color @Composable get() = LocalKhHost.current?.bg ?: (if (khDark()) Color(0xFF0B0E12) else Color(0xFFF3F5F7))
-    val card: Color @Composable get() = LocalKhHost.current?.card ?: (if (khDark()) Color(0xFF161A20) else Color.White)
-    val line: Color @Composable get() = LocalKhHost.current?.line ?: (if (khDark()) Color(0xFF262C35) else Color(0xFFE4E8EE))
-    val soft: Color @Composable get() = LocalKhHost.current?.soft ?: (if (khDark()) Color(0xFF42341B) else Color(0xFFF6EAE1))
-    val text: Color @Composable get() = LocalKhHost.current?.text ?: (if (khDark()) Color(0xFFE8ECF1) else Color(0xFF141A21))
-    val text2: Color @Composable get() = LocalKhHost.current?.text2 ?: (if (khDark()) Color(0xFF9AA4B1) else Color(0xFF5E6874))
-    val paper: Color @Composable get() = if (khDark()) Color(0xFF0F1210) else Color(0xFFFBF8F1)
-    val gold: Color @Composable get() = if (khDark()) Color(0xFFF2C14E) else Color(0xFFB7791F)
-    val good: Color @Composable get() = if (khDark()) Color(0xFF4ADE80) else Color(0xFF15803D)
-    val warn: Color @Composable get() = if (khDark()) Color(0xFFFB923C) else Color(0xFFC2410C)
-    val gradient: Brush @Composable get() = LocalKhHost.current?.let { Brush.linearGradient(listOf(it.grad1, it.grad2)) } ?: (if (khDark()) Brush.linearGradient(listOf(Color(0xFF994607), Color(0xFFA4370A))) else Brush.linearGradient(listOf(Color(0xFFB45309), Color(0xFFC2410C))))
+    val accent: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFF59E0B) else Color(0xFFB45309)
+    val accent2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFFB923C) else Color(0xFFC2410C)
+    val bg: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF0B0E12) else Color(0xFFF3F5F7)
+    val card: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF161A20) else Color.White
+    val line: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF262C35) else Color(0xFFE4E8EE)
+    val soft: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF42341B) else Color(0xFFF6EAE1)
+    val text: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFE8ECF1) else Color(0xFF141A21)
+    val text2: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF9AA4B1) else Color(0xFF5E6874)
+    val paper: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF0F1210) else Color(0xFFFBF8F1)
+    val gold: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFF2C14E) else Color(0xFFB7791F)
+    val good: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF4ADE80) else Color(0xFF15803D)
+    val warn: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFFB923C) else Color(0xFFC2410C)
+    val gradient: Brush @Composable get() = if (isSystemInDarkTheme()) Brush.linearGradient(listOf(Color(0xFF994607), Color(0xFFA4370A))) else Brush.linearGradient(listOf(Color(0xFFB45309), Color(0xFFC2410C)))
 }
 
 /** Light / dark follow the system, Arabic RTL. */
 @Composable
 internal fun KhTheme(content: @Composable () -> Unit) {
-    val host = khHostRead()
-    val dark = host?.dark ?: isSystemInDarkTheme()
+    val dark = isSystemInDarkTheme()
     val scheme = if (dark) darkColorScheme(
         primary = Color(0xFFF59E0B), onPrimary = Color(0xFF06121A),
         primaryContainer = Color(0xFF42341B), onPrimaryContainer = Color(0xFFE8ECF1),
@@ -103,15 +102,9 @@ internal fun KhTheme(content: @Composable () -> Unit) {
         surfaceContainer = Color.White, surfaceContainerHigh = Color.White,
         outlineVariant = Color(0xFFE4E8EE),
     )
-    val themed = if (host == null) scheme else scheme.copy(
-        primary = host.accent, onPrimary = if (host.dark) Color(0xFF0E1016) else Color.White,
-        primaryContainer = host.soft, onPrimaryContainer = host.text, secondary = host.accent2,
-        background = host.bg, onBackground = host.text, surface = host.bg, onSurface = host.text,
-        surfaceVariant = host.card, onSurfaceVariant = host.text2, surfaceContainer = host.card, outlineVariant = host.line,
-    )
-    CompositionLocalProvider(LocalKhHost provides host) { MaterialTheme(colorScheme = themed) {
+    MaterialTheme(colorScheme = scheme) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { content() }
-    } }
+    }
 }
 
 /** Gentle shrink while pressed, then onClick. */
@@ -304,22 +297,3 @@ internal object KhText {
         return b.toString()
     }
 }
-
-
-// ===== «الثيمات» من تطبيق «مركز الصديق»: طبقة الألوان فقط، النصوص والمنطق ما تغيّرت.
-// التطبيق يكتب ألوان الثيم المختار (أو ثيم المناسبة) في «alsiddiq_theme». الثيم الأصلي أو بدون اختيار = ألوان هذا الزر الأصلية كما هي.
-internal class KhHostColors(val dark: Boolean, val accent: Color, val accent2: Color, val bg: Color, val card: Color, val line: Color, val soft: Color, val text: Color, val text2: Color, val grad1: Color, val grad2: Color)
-internal val LocalKhHost = androidx.compose.runtime.staticCompositionLocalOf<KhHostColors?> { null }
-/** Reads the colours the app wrote for its tools (only when a theme other than the original is in force). */
-internal fun khHostFrom(sp: android.content.SharedPreferences): KhHostColors? {
-    if (!sp.getBoolean("tools_on", false)) return null
-    fun c(k: String) = Color(sp.getInt(k, 0))
-    return KhHostColors(sp.getBoolean("t_dark", false), c("t_accent"), c("t_accent2"), c("t_bg"), c("t_card"), c("t_line"), c("t_soft"), c("t_text"), c("t_text2"), c("t_grad1"), c("t_grad2"))
-}
-@Composable
-internal fun khHostRead(): KhHostColors? {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    return androidx.compose.runtime.remember { khHostFrom(ctx.getSharedPreferences("alsiddiq_theme", android.content.Context.MODE_PRIVATE)) }
-}
-@Composable
-internal fun khDark(): Boolean = LocalKhHost.current?.dark ?: isSystemInDarkTheme()

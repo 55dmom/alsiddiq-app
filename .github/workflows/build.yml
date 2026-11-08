@@ -99,7 +99,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk && if [ "${{ inputs.live_check }}" = "true" ]; then bash ci/cloud_check.sh out/AlSiddiq-check-${{ github.run_number }}.apk; fi
+          script: if [ -f ci/QUICK_SHOTS ]; then bash ci/shots_quick.sh out/AlSiddiq-demo-${{ github.run_number }}.apk; else bash ci/shots.sh out/AlSiddiq-demo-${{ github.run_number }}.apk; fi && if [ "${{ inputs.live_check }}" = "true" ]; then bash ci/cloud_check.sh out/AlSiddiq-check-${{ github.run_number }}.apk; fi
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}

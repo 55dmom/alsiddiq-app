@@ -101,7 +101,7 @@ fun HomeHeader(greeting: String, title: String, subtitle: String, unread: Int, o
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(46.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-                    Image(painterResource(R.drawable.logo), null, Modifier.size(40.dp))
+                    Image(painterResource(R.drawable.logo_disc), null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
