@@ -53,6 +53,8 @@ adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es demo_login ga
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool tasbeeh; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19_tool_tasbeeh.png
 adb shell input tap 540 1000; sleep 0.5; adb shell input tap 540 1000; sleep 0.5; adb shell input tap 540 1000; sleep 1; adb exec-out screencap -p > shots/19b_tool_tasbeeh_count.png
 adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool asma; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19c_tool_asma.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool adhkar; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19d_tool_adhkar.png
+adb shell am force-stop $PKG; adb shell am start -n $PKG/$ACT --es open_tool duas; sleep 10; nodlg; sleep 1; adb exec-out screencap -p > shots/19e_tool_duas.png
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/19_tools.crash.txt; [ -s shots/19_tools.crash.txt ] || rm -f shots/19_tools.crash.txt
 shot 01b_viewer_home_tools viewer home 14
 adb shell input swipe 540 1500 540 700 300; sleep 1; adb exec-out screencap -p > shots/01c_viewer_home_scrolled.png

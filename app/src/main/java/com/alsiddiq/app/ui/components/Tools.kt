@@ -18,7 +18,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.alsalmi.buttons.adhkar.AdhkarActivity
 import com.alsalmi.buttons.asma.AsmaAllahActivity
+import com.alsalmi.buttons.duas.DuasActivity
 import com.alsalmi.buttons.tasbeeh.TasbeehActivity
 import com.alsiddiq.app.ui.theme.Brand
 
@@ -30,6 +32,8 @@ data class ToolItem(val title: String, val sub: String, val icon: ImageVector, v
 
 object Tools {
     val all: List<ToolItem> = listOf(
+        ToolItem("الأذكار", "أذكار الصباح والمساء وغيرها", Icons.Outlined.WbSunny, Brand.Navy) { AdhkarActivity.start(it) },
+        ToolItem("الأدعية", "أدعية من القرآن والسنة", Icons.Outlined.VolunteerActivism, Brand.Green) { DuasActivity.start(it) },
         ToolItem("المسبحة", "عداد تسبيح وأذكار", Icons.Outlined.TouchApp, Brand.Gold) { TasbeehActivity.start(it) },
         ToolItem("أسماء الله الحسنى", "الأسماء الـ99 ومعانيها", Icons.Outlined.AutoAwesome, Brand.Maroon) { AsmaAllahActivity.start(it) },
     )
@@ -93,8 +97,9 @@ fun ToolsButton(tint: Color = Color.White, background: Color = Color.White.copy(
 @Composable
 fun ToolsRow(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Tools.all.forEach { t ->
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) { Tools.all.chunked(2).forEach { pair ->
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        pair.forEach { t ->
             Surface(onClick = { t.open(ctx) }, shape = RoundedCornerShape(18.dp), color = Color.White, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
                 Column(Modifier.padding(vertical = 14.dp, horizontal = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(t.color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
@@ -105,5 +110,7 @@ fun ToolsRow(modifier: Modifier = Modifier) {
                 }
             }
         }
+        if (pair.size == 1) Spacer(Modifier.weight(1f))
     }
+    } }
 }

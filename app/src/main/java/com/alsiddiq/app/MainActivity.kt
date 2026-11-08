@@ -26,6 +26,8 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.DEBUG) when (intent?.getStringExtra("open_tool")) {
             "tasbeeh" -> com.alsalmi.buttons.tasbeeh.TasbeehActivity.start(this)
             "asma" -> com.alsalmi.buttons.asma.AsmaAllahActivity.start(this)
+            "adhkar" -> com.alsalmi.buttons.adhkar.AdhkarActivity.start(this)
+            "duas" -> com.alsalmi.buttons.duas.DuasActivity.start(this)
             "menu" -> com.alsiddiq.app.ui.components.Tools.openOnStart = true
         }
         setContent {
