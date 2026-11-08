@@ -22,14 +22,20 @@ class MainActivity : ComponentActivity() {
         val ciTry = if (BuildConfig.DEBUG) intent?.getStringExtra("try_student") else null
         val selfTest = BuildConfig.DEBUG && intent?.getBooleanExtra("selftest", false) == true
         val photoTest = BuildConfig.DEBUG && intent?.getBooleanExtra("photo_test", false) == true
-        // CI screenshots of his side buttons: open_tool = prayer | tasbeeh | asma | adhkar | duas | menu
+        // CI screenshots of his side buttons: open_tool = mushaf | mushaf_page (+ page) | prayer | tasbeeh | asma | adhkar | duas | menu
         if (BuildConfig.DEBUG) when (intent?.getStringExtra("open_tool")) {
+            "mushaf" -> com.alsalmi.buttons.mushaf.MushafActivity.start(this)
             "prayer" -> com.alsalmi.buttons.prayer.PrayerTimesActivity.start(this)
             "tasbeeh" -> com.alsalmi.buttons.tasbeeh.TasbeehActivity.start(this)
             "asma" -> com.alsalmi.buttons.asma.AsmaAllahActivity.start(this)
             "adhkar" -> com.alsalmi.buttons.adhkar.AdhkarActivity.start(this)
             "duas" -> com.alsalmi.buttons.duas.DuasActivity.start(this)
             "menu" -> com.alsiddiq.app.ui.components.Tools.openOnStart = true
+        }
+        if (BuildConfig.DEBUG && intent?.getStringExtra("open_tool") == "mushaf_page") {
+            val page = intent?.getStringExtra("page")?.toIntOrNull() ?: 1
+            setContent { com.alsalmi.buttons.mushaf.MushafScreen(onBack = { finish() }, startPage = page) }
+            return
         }
         setContent {
             AlSiddiqTheme {

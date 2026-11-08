@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.alsalmi.buttons.adhkar.AdhkarActivity
 import com.alsalmi.buttons.asma.AsmaAllahActivity
 import com.alsalmi.buttons.duas.DuasActivity
+import com.alsalmi.buttons.mushaf.MushafActivity
 import com.alsalmi.buttons.prayer.PrayerTimesActivity
 import com.alsalmi.buttons.tasbeeh.TasbeehActivity
 import com.alsiddiq.app.ui.theme.Brand
@@ -33,6 +34,7 @@ data class ToolItem(val title: String, val sub: String, val icon: ImageVector, v
 
 object Tools {
     val all: List<ToolItem> = listOf(
+        ToolItem("المصحف", "المصحف كامل، صفحة صفحة", Icons.Outlined.MenuBook, Brand.Green) { MushafActivity.start(it) },
         ToolItem("مواقيت الصلاة", "الأوقات والإقامة والتنبيه، بدون إنترنت", Icons.Outlined.Schedule, Brand.Orange) { PrayerTimesActivity.start(it) },
         ToolItem("الأذكار", "أذكار الصباح والمساء وغيرها", Icons.Outlined.WbSunny, Brand.Navy) { AdhkarActivity.start(it) },
         ToolItem("الأدعية", "أدعية من القرآن والسنة", Icons.Outlined.VolunteerActivism, Brand.Green) { DuasActivity.start(it) },
