@@ -82,6 +82,32 @@ fun RecordStartScreen(user: Member, nav: NavHostController) {
     }
 }
 
+private fun gradeTitle(kind: RecordKind): String = when (kind) {
+    RecordKind.HIFZ -> "تقييم الحفظ"
+    RecordKind.MURAJA -> "تقييم المراجعة"
+    RecordKind.TASMEE -> "مراجعة وتسميع في نفس اليوم"
+}
+
+/** One rating row: the five Arabic grades, verbatim. */
+@Composable
+private fun RecordGradeRow(title: String, selected: Grade?, onPick: (Grade) -> Unit) {
+    Text(title, style = MaterialTheme.typography.labelLarge, color = Brand.Muted)
+    Spacer(Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Grade.entries.forEach { g ->
+            val sel = selected == g
+            Box(
+                Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(14.dp))
+                    .background(if (sel) gradeColor(g) else gradeColor(g).copy(alpha = 0.08f))
+                    .clickable { onPick(g) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(g.label, color = if (sel) Color.White else gradeColor(g), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+
 /** Steps 3–5: surah + ayat, grade, save. Stats update immediately after saving. */
 @Composable
 fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
@@ -108,7 +134,9 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
     var fromAyah by remember { mutableStateOf(start.second.toString()) }
     var toSurah by remember { mutableIntStateOf(start.first) }
     var toAyah by remember { mutableStateOf((start.second + 4).coerceAtMost(Quran.ayahCount(start.first)).toString()) }
-    var grade by remember { mutableStateOf<Grade?>(null) }
+    // v3.10 (build 13): each recording type keeps its own rating; the same-day row is the one under تسميع.
+    val grades = remember { mutableStateMapOf<RecordKind, Grade>() }
+    val grade = grades[kind]
     var mistakes by remember { mutableIntStateOf(0) }
     var notes by remember { mutableStateOf("") }
     var pickFrom by remember { mutableStateOf(false) }
@@ -212,23 +240,7 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
                 }
             }
         }
-        item {
-            Text("التقدير", style = MaterialTheme.typography.labelLarge, color = Brand.Muted)
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Grade.entries.forEach { g ->
-                    val sel = grade == g
-                    Box(
-                        Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(14.dp))
-                            .background(if (sel) gradeColor(g) else gradeColor(g).copy(alpha = 0.08f))
-                            .clickable { grade = g },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(g.label, color = if (sel) Color.White else gradeColor(g), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
-                    }
-                }
-            }
-        }
+        if (kind != RecordKind.TASMEE) item { RecordGradeRow(gradeTitle(kind), grade) { grades[kind] = it } }
         item {
             AppCard(padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -241,6 +253,7 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
                 Field(notes, { notes = it }, "ملاحظة للطالب وولي الأمر (اختياري)", singleLine = false, minLines = 2)
             }
         }
+        if (kind == RecordKind.TASMEE) item { RecordGradeRow(gradeTitle(kind), grade) { grades[kind] = it } }
         item {
             Button(
                 onClick = { save(false) }, enabled = valid && !saving,
