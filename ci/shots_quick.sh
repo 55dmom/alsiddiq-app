@@ -1,5 +1,5 @@
 #!/bin/bash
-# Short screenshot pass (build 12: teachers' sheet with حاضر / غائب / مستأذن and حضور / انصراف; «تواصل مع المركز»).
+# Short screenshot pass (build 13: the recording modes; build 12: teachers' sheet with حاضر / غائب / مستأذن and حضور / انصراف; «تواصل مع المركز»).
 # Used by CI only while ci/QUICK_SHOTS exists; the full pass is ci/shots.sh.
 set -x
 APK="$1"
@@ -50,5 +50,15 @@ st 33_gate_contact_on_360dp default --es demo_login gate
 adb shell wm size 720x1280; adb shell wm density 320; sleep 2
 st 34_gate_contact_on_360dp_b default --es demo_login gate
 adb shell wm size reset; adb shell wm density reset; sleep 2
+# build 13 (v3.10): the recording layout — three modes, each with its own rating row (admin, demo data)
+st 40_record_hifz default --es demo_login admin --es route record/s1
+adb shell input swipe 540 1500 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/40b_record_hifz_grades.png
+adb shell input swipe 540 700 540 1500 400; sleep 1
+tapt "مراجعة"; sleep 2; adb exec-out screencap -p > shots/41_record_muraja.png
+adb shell input swipe 540 1500 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/41b_record_muraja_grades.png
+adb shell input swipe 540 700 540 1500 400; sleep 1
+tapt "تسميع"; sleep 2; adb exec-out screencap -p > shots/42_record_tasmee.png
+adb shell input swipe 540 1500 540 700 400; adb shell input swipe 540 1500 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/42b_record_tasmee_bottom_row.png
+adb logcat -d -s AndroidRuntime:E | tail -40 > shots/record_layout.crash.txt; [ -s shots/record_layout.crash.txt ] || rm -f shots/record_layout.crash.txt
 ls -la shots
 exit 0
