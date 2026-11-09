@@ -59,6 +59,10 @@ adb shell input swipe 540 1500 540 700 400; sleep 1.5; adb exec-out screencap -p
 adb shell input swipe 540 700 540 1500 400; sleep 1
 tapt "تسميع"; sleep 2; adb exec-out screencap -p > shots/42_record_tasmee.png
 adb shell input swipe 540 1500 540 700 400; adb shell input swipe 540 1500 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/42b_record_tasmee_bottom_row.png
+# build 14 (v3.11): the fourth recording type «أظافر لم يسمع» with its own rating row
+adb shell input swipe 540 700 540 1500 400; sleep 1
+tapt "أظافر لم يسمع"; sleep 2; adb exec-out screencap -p > shots/43_record_azfar.png
+adb shell input swipe 540 1500 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/43b_record_azfar_grades.png
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/record_layout.crash.txt; [ -s shots/record_layout.crash.txt ] || rm -f shots/record_layout.crash.txt
 ls -la shots
 exit 0
