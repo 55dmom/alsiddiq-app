@@ -24,7 +24,9 @@ data class AboutPage(
     val buttons: List<AboutButton> = emptyList(),
     val updatedAt: Long = 0,
     /** true once a copy came from the server (else: the bundled default or the offline copy). */
-    val fromServer: Boolean = false
+    val fromServer: Boolean = false,
+    /** v3.9: the admin's switch «تواصل مع المركز» (off by default). On: the button shows for everyone and opens this page. */
+    val contactButton: Boolean = false
 ) {
     companion object { const val BUNDLED_PHOTO = "bundled:about_photo_1" }
 }

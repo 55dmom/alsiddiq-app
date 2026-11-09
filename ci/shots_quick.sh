@@ -1,5 +1,5 @@
 #!/bin/bash
-# Short screenshot pass (build 11: logo inside the gold ring + his 6 tools in their original look).
+# Short screenshot pass (build 12: teachers' sheet with حاضر / غائب / مستأذن and حضور / انصراف; «تواصل مع المركز»).
 # Used by CI only while ci/QUICK_SHOTS exists; the full pass is ci/shots.sh.
 set -x
 APK="$1"
@@ -36,51 +36,19 @@ for m in re.finditer(r"<node [^>]*>", x):
   echo "NOT FOUND: $1"; return 1
 }
 adb logcat -c
-# opening screen: default phone (411dp), then 360dp, then a large phone (480dp)
-st 01_gate_default default --es demo_login gate
-st 01b_gate_night night --es demo_login gate
-st 02_admin_home_header default --es demo_login admin --es route home
-adb shell wm size 720x1280; adb shell wm density 320; sleep 2
-st 03_gate_360dp default --es demo_login gate
-adb shell wm size reset; adb shell wm density reset
-adb shell wm size 1440x3200; adb shell wm density 480; sleep 2
-st 04_gate_large_480dp default --es demo_login gate
-adb shell wm size reset; adb shell wm density reset; sleep 2
-# his 6 tools, opened while the app's «night» theme is on: they must keep their own original colours
-st 10_tool_mushaf_page1 night --es open_tool mushaf_page --es page 1
-st 11_tool_hifz night --es open_tool hifz
-st 12_tool_khatma night --es open_tool khatma
-st 13_tool_prayer night --es open_tool prayer
-st 14_tool_adhkar night --es open_tool adhkar
-st 15_tool_duas night --es open_tool duas
-# v3.8 admin pages (demo data)
-st 05_viewer_home_salaam_star default --es demo_login viewer --es route home
-adb shell input swipe 540 1600 540 700 400; sleep 2; adb exec-out screencap -p > shots/05b_viewer_home_scrolled.png
+# v3.9 (build 12): the teachers' sheet — three statuses per teacher and «حضور / انصراف» times (demo data, admin)
 st 20_teacher_attendance default --es demo_login admin --es route teacher_attendance
-st 21_budget default --es demo_login admin --es route budget
-st 22_subscriptions default --es demo_login admin --es route subscriptions/c1
-st 23_subscriptions_teacher default --es demo_login teacher --es route subscriptions
-st 24_circle_banner default --es demo_login admin --es route circle/c1
-st 25_circle_multi_teachers default --es demo_login admin --es route circle_edit/c2
-st 28_circles_list_star default --es demo_login admin --es route circles
-st 26_admin_more default --es demo_login admin --es route more
-st 29_announcements_photo default --es demo_login admin --es route announcements
+adb shell input swipe 540 1600 540 1000 400; sleep 2; adb exec-out screencap -p > shots/20b_teacher_attendance_scrolled.png
+tapt "حضور —"; sleep 2; adb exec-out screencap -p > shots/20c_time_picker_checkin.png
+adb shell input keyevent 4; sleep 2
+# the admin's switch «تواصل مع المركز» (default off), then the opening screen with the button
+st 30_gate_contact_off default --es demo_login gate
+st 31_admin_more default --es demo_login admin --es route more
+tapt "تواصل مع المركز"; sleep 3; adb exec-out screencap -p > shots/31b_admin_switch_on.png
+st 32_gate_contact_on default --es demo_login gate
+st 33_gate_contact_on_360dp default --es demo_login gate
 adb shell wm size 720x1280; adb shell wm density 320; sleep 2
-st 27_home_360dp_salaam default --es demo_login teacher --es route home
+st 34_gate_contact_on_360dp_b default --es demo_login gate
 adb shell wm size reset; adb shell wm density reset; sleep 2
-ls -la shots
-# back check (his 10:24 PM report on iPhone): الإدارة tab → a row → back must return to الإدارة, not the tools
-( set +e
-st 30_back_start default --es demo_login admin --es route home
-tapt "الإدارة"; adb exec-out screencap -p > shots/30a_admin_tab.png
-tapt "حضور وغياب المعلمين"; adb exec-out screencap -p > shots/30b_row_opened.png
-adb shell input keyevent 4; sleep 3; adb exec-out screencap -p > shots/30c_after_back.png
-tapt "عن المركز"; sleep 2; adb exec-out screencap -p > shots/30d_about_opened.png
-adb shell input keyevent 4; sleep 3; adb exec-out screencap -p > shots/30e_after_back_about.png
-tapt "الأدوات"; adb exec-out screencap -p > shots/30f_tools_tab.png
-tapt "الإدارة"; tapt "الميزانية"; adb shell input keyevent 4; sleep 3; adb exec-out screencap -p > shots/30g_tools_then_admin_row_back.png
-) &
-BK=$!; for i in $(seq 1 60); do kill -0 $BK 2>/dev/null || break; sleep 5; done; kill $BK 2>/dev/null; echo "back check done/stopped"
-st 99_back_default default --es demo_login gate
 ls -la shots
 exit 0

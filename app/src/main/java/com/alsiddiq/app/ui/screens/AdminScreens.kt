@@ -205,6 +205,7 @@ fun MoreScreen(user: Member, nav: NavHostController) {
         item { SectionHeader("المظهر") }
         item { ThemesMenuItem() }
         item { com.alsiddiq.app.ui.about.CenterInfoEntries() }
+        item { com.alsiddiq.app.ui.about.ContactButtonSwitch() }
         item { SectionHeader("المتابعة") }
         item { MenuRow("المتفوقون", "ترتيب تلقائي من التقارير • اظهر تفوق الطالب", Icons.Outlined.EmojiEvents, Brand.Gold) { nav.navigate("honors") } }
         item { MenuRow("الحضور والغياب", "تسجيل ومراجعة الحضور", Icons.Outlined.FactCheck) { nav.navigate("attendance") } }

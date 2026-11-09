@@ -88,6 +88,42 @@ private fun LoadError(msg: String?, onRetry: () -> Unit) {
 }
 
 // ============================ «حضور وغياب المعلمين» ============================
+/** v3.9: حاضر / غائب / مستأذن, and «حضور و انصراف» (a time for the check-in and for the check-out, per teacher). Friday = rest. */
+@Composable
+private fun StatusChoice(selected: String?, onPick: (String) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(TeacherStatus.PRESENT to Brand.Green, TeacherStatus.ABSENT to Brand.Red, TeacherStatus.EXCUSED to Brand.Gold).forEach { (st, col) ->
+            val sel = selected == st
+            Box(Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) col else col.copy(alpha = 0.08f)).clickable { onPick(st) },
+                contentAlignment = Alignment.Center) { Text(TeacherStatus.label(st), color = if (sel) Color.White else col, style = MaterialTheme.typography.labelMedium) }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.TimeChip(label: String, value: String?, enabled: Boolean, onClick: () -> Unit) {
+    val col = Brand.Navy
+    Box(Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(12.dp))
+        .background(if (value != null) col.copy(alpha = 0.14f) else col.copy(alpha = 0.05f))
+        .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Text(if (value != null) "$label $value" else "$label —", color = if (enabled) col else Brand.Muted, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun TimeDialog(title: String, initial: String?, onPick: (String) -> Unit, onClear: () -> Unit, onDismiss: () -> Unit) {
+    val parts = (initial ?: "08:00").split(":")
+    val state = rememberTimePickerState(initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 8, initialMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0, is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { TimePicker(state = state) },
+        confirmButton = { TextButton(onClick = { onPick("%02d:%02d".format(state.hour, state.minute)) }) { Text("تم") } },
+        dismissButton = { Row { TextButton(onClick = onClear) { Text("مسح") }; TextButton(onClick = onDismiss) { Text("إلغاء") } } }
+    )
+}
+
 @Composable
 fun TeacherAttendanceScreen(user: Member, nav: NavHostController) {
     val snap = snapshot()
@@ -95,7 +131,9 @@ fun TeacherAttendanceScreen(user: Member, nav: NavHostController) {
     val actions = rememberActions()
     if (user.role != Role.ADMIN) { ScreenList("حضور وغياب المعلمين", onBack = { nav.popBackStack() }) { item { EmptyState("للإدارة فقط", "") } }; return }
     val teachers = snap.members.filter { it.role == Role.TEACHER && it.active && !it.allCircles }.sortedBy { it.fullName }
-    var day by remember { mutableStateOf(LocalDate.now()) }
+    val today = LocalDate.now()
+    // Friday is a rest day: the sheet opens on the last record day (Thursday on a Friday) and skips Friday.
+    var day by remember { mutableStateOf(RestDay.lastWorkDayOnOrBefore(today)) }
     val month = YearMonth.from(day)
     var all by remember { mutableStateOf<List<TeacherMark>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -105,36 +143,42 @@ fun TeacherAttendanceScreen(user: Member, nav: NavHostController) {
         repo.teacherMarks(from, month.atEndOfMonth().toString()).onSuccess { all = it; error = null }.onFailure { error = it.message }
     }
     val dayIso = day.toString()
-    val saved = all.filter { it.day == dayIso }.associate { it.teacherId to it.present }
-    val marks = remember(dayIso, saved) { mutableStateMapOf<String, Boolean>().apply { putAll(saved) } }
+    val saved = all.filter { it.day == dayIso }.associateBy { it.teacherId }
+    val marks = remember(dayIso, saved) { mutableStateMapOf<String, TeacherMark>().apply { putAll(saved) } }
     val dirty = teachers.any { marks[it.id] != saved[it.id] }
     val monthMarks = all.filter { it.day.startsWith(month.toString()) }
+    var timeFor by remember { mutableStateOf<Pair<String, Boolean>?>(null) }  // (teacher id, true = check-in)
+    val nextDay = RestDay.nextWorkDay(day, today)
 
     ScreenList("حضور وغياب المعلمين", onBack = { nav.popBackStack() }) {
         item {
             AppCard(padding = 8.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { day = day.minusDays(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "اليوم السابق") }
+                    IconButton(onClick = { day = RestDay.prevWorkDay(day) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "اليوم السابق") }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(Fmt.dayTitle(day), style = MaterialTheme.typography.titleSmall)
                         Text(Fmt.hijri(day), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                     }
-                    IconButton(onClick = { if (day.isBefore(LocalDate.now())) day = day.plusDays(1) }, enabled = day.isBefore(LocalDate.now())) {
+                    IconButton(onClick = { nextDay?.let { day = it } }, enabled = nextDay != null) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "اليوم التالي")
                     }
                 }
             }
         }
+        if (RestDay.isRest(today)) item { AppCard(padding = 12.dp) { Text("اليوم الجمعة — يوم راحة", style = MaterialTheme.typography.titleSmall); Text(RestDay.MESSAGE, style = MaterialTheme.typography.bodySmall, color = Brand.Muted) } }
         item { LoadError(error) { reload++ } }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Pill("حاضر ${teachers.count { marks[it.id] == true }}", Brand.Green); Spacer(Modifier.width(6.dp))
-                Pill("غائب ${teachers.count { marks[it.id] == false }}", Brand.Red); Spacer(Modifier.width(6.dp))
+                Pill("حاضر ${teachers.count { marks[it.id]?.present == true }}", Brand.Green); Spacer(Modifier.width(6.dp))
+                Pill("غائب ${teachers.count { marks[it.id]?.absent == true }}", Brand.Red); Spacer(Modifier.width(6.dp))
+                Pill("مستأذن ${teachers.count { marks[it.id]?.excused == true }}", Brand.Gold); Spacer(Modifier.width(6.dp))
                 Pill("لم يُحدَّد ${teachers.count { marks[it.id] == null }}", Brand.Muted)
             }
         }
         if (teachers.isEmpty()) item { EmptyState("لا يوجد معلمون", "أضف المعلمين من الإدارة ← المعلمون") }
         items(teachers, key = { it.id }) { t ->
+            val m = marks[t.id]
+            val hasStatus = m != null && m.status != TeacherStatus.ABSENT
             AppCard(padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(t.fullName, 36.dp, Brand.Maroon)
@@ -145,13 +189,21 @@ fun TeacherAttendanceScreen(user: Member, nav: NavHostController) {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                TwoChoice("حاضر", "غائب", marks[t.id], Brand.Green, Brand.Red, { marks[t.id] = true }, { marks[t.id] = false })
+                StatusChoice(m?.status) { st ->
+                    val keep = st != TeacherStatus.ABSENT
+                    marks[t.id] = TeacherMark(t.id, dayIso, st, if (keep) m?.checkIn else null, if (keep) m?.checkOut else null)
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TimeChip("حضور", m?.checkIn, hasStatus) { timeFor = t.id to true }
+                    TimeChip("انصراف", m?.checkOut, hasStatus) { timeFor = t.id to false }
+                }
             }
         }
         if (teachers.isNotEmpty()) item {
             Button(onClick = {
-                val m = teachers.mapNotNull { t -> marks[t.id]?.let { t.id to it } }.toMap()
-                actions.run(null, { repo.saveTeacherMarks(dayIso, m) }) { n -> actions.say("حُفظ حضور $n من المعلمين"); reload++ }
+                val list = teachers.mapNotNull { marks[it.id] }
+                actions.run(null, { repo.saveTeacherMarks(dayIso, list) }) { n -> actions.say("حُفظ حضور $n من المعلمين"); reload++ }
             }, enabled = dirty, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) { Text(if (dirty) "حفظ" else "محفوظ ✓") }
         }
         item { SectionHeader("هذا الشهر — ${V38Fmt.month(month)}") }
@@ -159,16 +211,21 @@ fun TeacherAttendanceScreen(user: Member, nav: NavHostController) {
             AppCard(padding = 12.dp) {
                 if (teachers.isEmpty()) Text("—", color = Brand.Muted)
                 teachers.forEach { t ->
-                    val p = monthMarks.count { it.teacherId == t.id && it.present }; val a = monthMarks.count { it.teacherId == t.id && !it.present }
-                    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(t.fullName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Pill("حاضر $p", Brand.Green); Spacer(Modifier.width(6.dp)); Pill("غائب $a", Brand.Red)
+                    val p = monthMarks.count { it.teacherId == t.id && it.present }
+                    val a = monthMarks.count { it.teacherId == t.id && it.absent }
+                    val e = monthMarks.count { it.teacherId == t.id && it.excused }
+                    Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                        Text(t.fullName, style = MaterialTheme.typography.bodyMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Pill("حاضر $p", Brand.Green); Spacer(Modifier.width(6.dp)); Pill("غائب $a", Brand.Red); Spacer(Modifier.width(6.dp)); Pill("مستأذن $e", Brand.Gold)
+                        }
                     }
                 }
             }
         }
         item { SectionHeader("السجل") }
-        val days = all.map { it.day }.distinct().sortedDescending().take(31)
+        val days = all.map { it.day }.distinct().sortedDescending()
+            .filter { d -> runCatching { !RestDay.isRest(LocalDate.parse(d)) }.getOrDefault(true) }.take(31)
         if (days.isEmpty()) item { EmptyState("لا يوجد سجل بعد", "يظهر هنا كل يوم يُسجَّل فيه الحضور") }
         items(days, key = { "d$it" }) { d ->
             val rows = all.filter { it.day == d }
@@ -179,10 +236,29 @@ fun TeacherAttendanceScreen(user: Member, nav: NavHostController) {
                         Text(ld?.let { Fmt.dayTitle(it) } ?: d, style = MaterialTheme.typography.bodyMedium)
                         Text(ld?.let { Fmt.hijri(it) } ?: "", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                     }
-                    Pill("حاضر ${rows.count { it.present }}", Brand.Green); Spacer(Modifier.width(6.dp)); Pill("غائب ${rows.count { !it.present }}", Brand.Red)
+                    Pill("حاضر ${rows.count { it.present }}", Brand.Green); Spacer(Modifier.width(4.dp))
+                    Pill("غائب ${rows.count { it.absent }}", Brand.Red); Spacer(Modifier.width(4.dp))
+                    Pill("مستأذن ${rows.count { it.excused }}", Brand.Gold)
                 }
             }
         }
+    }
+
+    timeFor?.let { (tid, isIn) ->
+        val cur = marks[tid]
+        TimeDialog(
+            title = if (isIn) "وقت الحضور" else "وقت الانصراف",
+            initial = if (isIn) cur?.checkIn else cur?.checkOut,
+            onPick = { hhmm ->
+                if (cur != null) marks[tid] = if (isIn) cur.copy(checkIn = hhmm) else cur.copy(checkOut = hhmm)
+                timeFor = null
+            },
+            onClear = {
+                if (cur != null) marks[tid] = if (isIn) cur.copy(checkIn = null) else cur.copy(checkOut = null)
+                timeFor = null
+            },
+            onDismiss = { timeFor = null }
+        )
     }
 }
 

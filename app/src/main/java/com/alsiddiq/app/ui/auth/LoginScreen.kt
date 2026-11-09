@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.CoPresent
 import androidx.compose.material.icons.outlined.Lock
@@ -196,6 +197,17 @@ fun LoginScreen() {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(Icons.AutoMirrored.Outlined.Send, null, tint = Color(0xFF29A1DE), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                     Text("المطوّر", color = Brand.Navy, style = MaterialTheme.typography.labelLarge)   // opens «تواصل مع المطوّر»
+                }
+            }
+        }
+        // v3.9: «تواصل مع المركز» — only when the admin switched it on (default off); opens «عن المركز».
+        val gateContact = com.alsiddiq.app.ui.LocalContainer.current.center.about.collectAsState().value.contactButton
+        if (gateContact) {
+            Spacer(Modifier.height(10.dp))
+            Surface(onClick = { com.alsiddiq.app.ui.about.AboutActivity.start(gateCtx) }, shape = RoundedCornerShape(50), color = Brand.Card, shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Icon(Icons.Outlined.Call, null, tint = Brand.Green, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                    Text("تواصل مع المركز", color = Brand.Navy, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }

@@ -60,6 +60,7 @@ fun RecordStartScreen(user: Member, nav: NavHostController) {
     val today = LocalDate.now()
     val logged = snap.recitations.filter { Stats.dayOf(it.recordedAt) == today }.map { it.studentId }.toSet()
     ScreenList("تسجيل تسميع", onBack = if (user.role == Role.ADMIN) ({ nav.popBackStack() }) else null) {
+        if (RestDay.isRest(today)) item { AppCard(padding = 12.dp) { Text("اليوم الجمعة — يوم راحة", style = MaterialTheme.typography.titleSmall); Text(RestDay.MESSAGE, style = MaterialTheme.typography.bodySmall, color = Brand.Muted) } }
         item {
             Text("١. اختر الحلقة", style = MaterialTheme.typography.labelLarge, color = Brand.Muted)
             Spacer(Modifier.height(6.dp))
@@ -117,7 +118,7 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
     val fa = fromAyah.toIntOrNull() ?: 0
     val ta = toAyah.toIntOrNull() ?: 0
     val ayat = Quran.ayatBetween(fromSurah, fa, toSurah, ta)
-    val valid = ayat > 0 && grade != null
+    val valid = ayat > 0 && grade != null && !RestDay.isRest(LocalDate.now())   // v3.9: no recitation on Friday
     val pages = if (ayat > 0) Quran.pagesOf(Quran.globalIndex(fromSurah, fa), Quran.globalIndex(toSurah, ta)) else 0.0
     val surahLabel: (Int) -> String = { n -> "$n. ${Quran.name(n)} (${Quran.ayahCount(n)})" }
 
@@ -138,6 +139,7 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
     }
 
     ScreenList("تسجيل لـ ${s.fullName}", onBack = { nav.popBackStack() }) {
+        if (RestDay.isRest(today)) item { AppCard(padding = 12.dp) { Text("اليوم الجمعة — يوم راحة", style = MaterialTheme.typography.titleSmall); Text(RestDay.MESSAGE, style = MaterialTheme.typography.bodySmall, color = Brand.Muted) } }
         item {
             AppCard(padding = 12.dp, onClick = { nav.navigate("student/${s.id}") }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

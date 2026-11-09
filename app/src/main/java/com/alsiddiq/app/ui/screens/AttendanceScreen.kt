@@ -58,7 +58,9 @@ fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
     // v3.3: a teacher takes attendance in his own circle(s) only.
     val circles = Permissions.ownCircles(user, snap)
     var circleIdx by remember { mutableIntStateOf(circles.indexOfFirst { it.id == circleId }.coerceAtLeast(0)) }
-    var day by remember { mutableStateOf(LocalDate.now()) }
+    // v3.9: Friday is a rest day — the sheet opens on the last record day and skips Friday; nothing is recorded on Friday.
+    var day by remember { mutableStateOf(RestDay.lastWorkDayOnOrBefore(LocalDate.now())) }
+    val nextDay = RestDay.nextWorkDay(day)
     val circle = circles.getOrNull(circleIdx)
     val students = circle?.let { c -> snap.studentsIn(c.id).sortedBy { it.fullName } } ?: emptyList()
     val dayIso = day.toString()
@@ -68,15 +70,16 @@ fun AttendanceScreen(user: Member, nav: NavHostController, circleId: String?) {
 
     ScreenList("الحضور والغياب", onBack = if (user.role == Role.ADMIN) ({ nav.popBackStack() }) else null) {
         item { ChoiceChips(circles.map { it.name }, circleIdx, { circleIdx = it }) }
+        if (RestDay.isRest(LocalDate.now())) item { AppCard(padding = 12.dp) { Text("اليوم الجمعة — يوم راحة", style = MaterialTheme.typography.titleSmall); Text(RestDay.MESSAGE, style = MaterialTheme.typography.bodySmall, color = Brand.Muted) } }
         item {
             AppCard(padding = 8.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { day = day.minusDays(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "اليوم السابق") }
+                    IconButton(onClick = { day = RestDay.prevWorkDay(day) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "اليوم السابق") }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(Fmt.dayTitle(day), style = MaterialTheme.typography.titleSmall)
                         Text(Fmt.hijri(day), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                     }
-                    IconButton(onClick = { if (day.isBefore(LocalDate.now())) day = day.plusDays(1) }, enabled = day.isBefore(LocalDate.now())) {
+                    IconButton(onClick = { nextDay?.let { day = it } }, enabled = nextDay != null) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "اليوم التالي")
                     }
                 }

@@ -304,6 +304,7 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
 
     // ---------------- Teaching ----------------
     override suspend fun logRecitation(r: Recitation) = mutate { d, u ->
+        if (com.alsiddiq.app.domain.RestDay.isRest(java.time.LocalDate.now())) throw ValidationError(com.alsiddiq.app.domain.RestDay.MESSAGE)
         val student = d.student(r.studentId) ?: throw ValidationError("الطالب غير موجود")
         require(Permissions.canRecordFor(u, student, d))
         if (!Quran.isValid(r.fromSurah, r.fromAyah) || !Quran.isValid(r.toSurah, r.toAyah)) throw ValidationError("رقم الآية غير صحيح")
@@ -326,6 +327,7 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
     override suspend fun saveAttendance(circleId: String, day: String, marks: Map<String, AttendanceStatus>) = mutate { d, u ->
         val circle = d.circle(circleId) ?: throw ValidationError("الحلقة غير موجودة")
         require(u.role == Role.ADMIN || Permissions.teachesCircle(u, circle))
+        if (com.alsiddiq.app.domain.RestDay.isRest(java.time.LocalDate.parse(day))) throw ValidationError(com.alsiddiq.app.domain.RestDay.MESSAGE)
         val kept = d.attendance.filterNot { it.day == day && it.studentId in marks.keys }
         val added = marks.map { (sid, st) -> Attendance(newId(), sid, circleId, day, st, u.id, byName = byName(u)) }
         val notes = marks.filter { it.value == AttendanceStatus.ABSENT }.flatMap { (sid, _) ->
@@ -405,8 +407,10 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
     private fun seedV38(): V38Store {
         val today = java.time.LocalDate.now()
         val teachers = store.data.members.filter { it.role == Role.TEACHER && it.active && !it.allCircles }
-        val marks = (1..6).flatMap { back -> val d = today.minusDays(back.toLong()).toString()
-            teachers.mapIndexed { i, t -> TeacherMark(t.id, d, !(i == 1 && back % 3 == 0) && !(i == 2 && back == 2)) } }
+        val marks = (0..9).map { today.minusDays(it.toLong()) }.filterNot { com.alsiddiq.app.domain.RestDay.isRest(it) }.take(6).flatMap { dd -> val back = today.toEpochDay() - dd.toEpochDay(); val d = dd.toString()
+            teachers.mapIndexed { i, t ->
+                val st = when { i == 2 && back == 2L -> TeacherStatus.ABSENT; i == 0 && back == 4L -> TeacherStatus.ABSENT; i == 1 && back % 3 == 0L -> TeacherStatus.EXCUSED; else -> TeacherStatus.PRESENT }
+                TeacherMark(t.id, d, st, if (st == TeacherStatus.ABSENT) null else "07:55", if (st == TeacherStatus.ABSENT) null else "13:05") } }
         val st = store.data.students.filter { it.active }
         val m0 = today.withDayOfMonth(1)
         val budget = st.take(4).mapIndexed { i, s -> BudgetEntry("b-in-$i", BudgetEntry.INCOME, (store.data.circle(s.circleId)?.feeYer ?: 3000).toDouble(),
@@ -424,10 +428,13 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
     override suspend fun teacherMarks(fromDay: String, toDay: String): Result<List<TeacherMark>> = runCatching {
         adminV38(); v38.marks.filter { it.day >= fromDay && it.day <= toDay }.sortedByDescending { it.day }
     }
-    override suspend fun saveTeacherMarks(day: String, present: Map<String, Boolean>): Result<Int> = runCatching {
-        adminV38(); if (present.isEmpty()) throw ValidationError("حدّد حاضر أو غائب لمعلم واحد على الأقل")
-        v38 = v38.copy(marks = v38.marks.filterNot { it.day == day && it.teacherId in present.keys } + present.map { (t, p) -> TeacherMark(t, day, p) }); saveV38(); present.size
+    override suspend fun saveTeacherMarks(day: String, marks: List<TeacherMark>): Result<Int> = runCatching {
+        adminV38(); if (marks.isEmpty()) throw ValidationError("حدّد حاضر أو غائب أو مستأذن لمعلم واحد على الأقل")
+        if (com.alsiddiq.app.domain.RestDay.isRest(java.time.LocalDate.parse(day))) throw ValidationError(com.alsiddiq.app.domain.RestDay.MESSAGE)
+        val ids = marks.map { it.teacherId }.toSet()
+        v38 = v38.copy(marks = v38.marks.filterNot { it.day == day && it.teacherId in ids } + marks.map { if (it.status == TeacherStatus.ABSENT) it.copy(checkIn = null, checkOut = null) else it }); saveV38(); marks.size
     }
+    override suspend fun saveContactButton(on: Boolean): Result<Unit> = runCatching { adminV38(); aboutLocal.set(aboutLocal.page.copy(contactButton = on)) }
     override suspend fun budgetEntries(): Result<List<BudgetEntry>> = runCatching { adminV38(); v38.budget.sortedWith(compareByDescending<BudgetEntry> { it.day }.thenByDescending { it.createdAt }) }
     override suspend fun saveBudgetEntry(e: BudgetEntry, isNew: Boolean): Result<Unit> = runCatching {
         adminV38()

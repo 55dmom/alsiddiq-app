@@ -629,21 +629,39 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     private fun JsonObject.str(k: String): String? = this[k]?.jsonPrimitive?.contentOrNull
     private fun JsonObject.num(k: String): Double? = this[k]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()
 
+    /** v3.9: no record on a Friday (the rest day), for any kind of attendance or recitation. */
+    private fun noRecordOn(day: java.time.LocalDate) { if (com.alsiddiq.app.domain.RestDay.isRest(day)) throw ValidationError(com.alsiddiq.app.domain.RestDay.MESSAGE) }
+
     override suspend fun teacherMarks(fromDay: String, toDay: String): Result<List<TeacherMark>> = guarded {
         require(me().role == Role.ADMIN)
-        val rows = net("حضور المعلمين") { api.selectAll(token(), "teacher_attendance", "select=teacher_profile_id,day,status&day=gte.$fromDay&day=lte.$toDay&order=day.desc") }
+        val rows = net("حضور المعلمين") { api.selectAll(token(), "teacher_attendance", "select=teacher_profile_id,day,status,check_in,check_out&day=gte.$fromDay&day=lte.$toDay&order=day.desc") }
         Result.success(rows.mapNotNull { o -> val t = o.str("teacher_profile_id") ?: return@mapNotNull null
-            TeacherMark(t, o.str("day") ?: return@mapNotNull null, o.str("status") == "present") })
+            TeacherMark(t, o.str("day") ?: return@mapNotNull null, o.str("status") ?: return@mapNotNull null,
+                o.str("check_in")?.take(5)?.takeIf { it.isNotBlank() }, o.str("check_out")?.take(5)?.takeIf { it.isNotBlank() }) })
     }
 
-    override suspend fun saveTeacherMarks(day: String, present: Map<String, Boolean>): Result<Int> = guarded {
+    override suspend fun saveTeacherMarks(day: String, marks: List<TeacherMark>): Result<Int> = guarded {
         val u = me(); require(u.role == Role.ADMIN)
-        if (present.isEmpty()) throw ValidationError("حدّد حاضر أو غائب لمعلم واحد على الأقل")
-        val rows = JsonArray(present.map { (tid, p) -> buildJsonObject {
-            put("center_id", center()); put("teacher_profile_id", tid); put("day", day); put("status", if (p) "present" else "absent"); put("marked_by", u.id)
+        if (marks.isEmpty()) throw ValidationError("حدّد حاضر أو غائب أو مستأذن لمعلم واحد على الأقل")
+        noRecordOn(java.time.LocalDate.parse(day))
+        val rows = JsonArray(marks.map { m -> buildJsonObject {
+            put("center_id", center()); put("teacher_profile_id", m.teacherId); put("day", day); put("status", m.status); put("marked_by", u.id)
+            put("check_in", if (m.status == TeacherStatus.ABSENT) null else m.checkIn)
+            put("check_out", if (m.status == TeacherStatus.ABSENT) null else m.checkOut)
         } })
         net("حفظ حضور المعلمين") { api.upsert(token(), "teacher_attendance", rows, "teacher_profile_id,day") }
-        Result.success(present.size)
+        Result.success(marks.size)
+    }
+
+    /** v3.9: the «تواصل مع المركز» switch, kept in its own row (anon-readable with «عن المركز»). */
+    override suspend fun saveContactButton(on: Boolean): Result<Unit> = guarded {
+        require(me().role == Role.ADMIN)
+        val t = adminToken()
+        online { api.upsert(t, "centre_settings", buildJsonObject {
+            put("center_id", center()); put("contact_button", on); put("updated_at", Rows.iso(System.currentTimeMillis()))
+        }, "center_id") }
+        aboutLocal.set(aboutLocal.page.copy(contactButton = on))
+        Result.success(Unit)
     }
 
     override suspend fun budgetEntries(): Result<List<BudgetEntry>> = guarded {
@@ -881,6 +899,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val u = me(); val d = st.cache
         val student = d.student(r.studentId) ?: throw ValidationError("الطالب غير موجود")
         require(Permissions.canRecordFor(u, student, d))
+        noRecordOn(java.time.LocalDate.now())
         if (!com.alsiddiq.app.core.Quran.isValid(r.fromSurah, r.fromAyah) || !com.alsiddiq.app.core.Quran.isValid(r.toSurah, r.toAyah)) throw ValidationError("رقم الآية غير صحيح")
         if (com.alsiddiq.app.core.Quran.ayatBetween(r.fromSurah, r.fromAyah, r.toSurah, r.toAyah) <= 0) throw ValidationError("نهاية المقطع قبل بدايته")
         val saved = r.copy(id = r.id.ifBlank { newId() }, teacherId = u.id, circleId = student.circleId, byName = r.byName ?: byName())
@@ -897,6 +916,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val u = me(); val d = st.cache
         val circle = d.circle(circleId) ?: throw ValidationError("الحلقة غير موجودة")
         require(u.role == Role.ADMIN || Permissions.teachesCircle(u, circle))
+        noRecordOn(java.time.LocalDate.parse(day))
         val rows = buildJsonArray {
             marks.forEach { (sid, s) -> addJsonObject {
                 put("center_id", center()); put("student_id", sid); put("circle_id", circleId); put("day", day)
@@ -983,13 +1003,14 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         runCatching {
             val row = api.selectPublic("centre_about", "select=*&limit=1").firstOrNull()
             val btns = runCatching { api.selectPublic("centre_about_buttons", "select=*&order=sort") }.getOrDefault(emptyList())
+            val contact = runCatching { api.selectPublic("centre_settings", "select=contact_button&limit=1").firstOrNull()?.get("contact_button")?.jsonPrimitive?.booleanOrNull }.getOrNull() ?: false
             val photos = row?.get("photos")?.let { el -> runCatching { el.jsonArray.mapNotNull { it.jsonPrimitive.contentOrNull } }.getOrNull() }
             aboutLocal.set(AboutPage(
                 body = row?.get("body")?.jsonPrimitive?.contentOrNull,
                 photos = if (row == null) listOf(AboutPage.BUNDLED_PHOTO) else photos ?: emptyList(),
                 buttons = AboutLocal.sorted(btns.map { b -> AboutButton(b["id"]!!.jsonPrimitive.content, b["label"]?.jsonPrimitive?.contentOrNull ?: "",
                     b["kind"]?.jsonPrimitive?.contentOrNull ?: "link", b["value"]?.jsonPrimitive?.contentOrNull ?: "", b["sort"]?.jsonPrimitive?.intOrNull ?: 0) }),
-                updatedAt = Rows.ts(row?.get("updated_at")?.jsonPrimitive?.contentOrNull), fromServer = true))
+                updatedAt = Rows.ts(row?.get("updated_at")?.jsonPrimitive?.contentOrNull), fromServer = true, contactButton = contact))
         }.onFailure { android.util.Log.i("ALSIDDIQ_SELFTEST", "about: offline/unavailable -> showing the saved copy (${it.message})") }
     }
 

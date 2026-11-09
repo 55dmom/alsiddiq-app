@@ -116,7 +116,10 @@ interface CenterRepository {
     // v3.8 (admin page): teachers' attendance, the budget, the monthly subscriptions sheet, and the circle's photo («لوحة الحلقة»).
     // Online reads/writes (no offline queue). Teachers' attendance and the budget are the admin's only.
     suspend fun teacherMarks(fromDay: String, toDay: String): Result<List<TeacherMark>> = Result.failure(UnsupportedOperationException())
-    suspend fun saveTeacherMarks(day: String, present: Map<String, Boolean>): Result<Int> = Result.failure(UnsupportedOperationException())
+    /** v3.9: the given teachers' marks for one day (status + check-in / check-out); the others are not touched. */
+    suspend fun saveTeacherMarks(day: String, marks: List<TeacherMark>): Result<Int> = Result.failure(UnsupportedOperationException())
+    /** v3.9: the admin's «تواصل مع المركز» switch (stored with «عن المركز»; read by everyone). */
+    suspend fun saveContactButton(on: Boolean): Result<Unit> = Result.failure(UnsupportedOperationException())
     suspend fun budgetEntries(): Result<List<BudgetEntry>> = Result.failure(UnsupportedOperationException())
     suspend fun saveBudgetEntry(e: BudgetEntry, isNew: Boolean): Result<Unit> = Result.failure(UnsupportedOperationException())
     suspend fun deleteBudgetEntry(id: String): Result<Unit> = Result.failure(UnsupportedOperationException())
