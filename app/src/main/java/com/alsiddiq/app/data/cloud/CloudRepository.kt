@@ -654,13 +654,14 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
     }
 
     /** v3.9: the «تواصل مع المركز» switch, kept in its own row (anon-readable with «عن المركز»). */
-    override suspend fun saveContactButton(on: Boolean): Result<Unit> = guarded {
+    override suspend fun saveContactButton(on: Boolean, phone: String): Result<Unit> = guarded {
         require(me().role == Role.ADMIN)
         val t = adminToken()
+        val num = phone.trim()
         online { api.upsert(t, "centre_settings", buildJsonObject {
-            put("center_id", center()); put("contact_button", on); put("updated_at", Rows.iso(System.currentTimeMillis()))
+            put("center_id", center()); put("contact_button", on); put("contact_phone", num); put("updated_at", Rows.iso(System.currentTimeMillis()))
         }, "center_id") }
-        aboutLocal.set(aboutLocal.page.copy(contactButton = on))
+        aboutLocal.set(aboutLocal.page.copy(contactButton = on, contactPhone = num))
         Result.success(Unit)
     }
 
@@ -1003,14 +1004,16 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         runCatching {
             val row = api.selectPublic("centre_about", "select=*&limit=1").firstOrNull()
             val btns = runCatching { api.selectPublic("centre_about_buttons", "select=*&order=sort") }.getOrDefault(emptyList())
-            val contact = runCatching { api.selectPublic("centre_settings", "select=contact_button&limit=1").firstOrNull()?.get("contact_button")?.jsonPrimitive?.booleanOrNull }.getOrNull() ?: false
+            val settings = runCatching { api.selectPublic("centre_settings", "select=contact_button,contact_phone&limit=1").firstOrNull() }.getOrNull()
+            val contact = settings?.get("contact_button")?.jsonPrimitive?.booleanOrNull ?: false
+            val contactPhone = settings?.get("contact_phone")?.jsonPrimitive?.contentOrNull ?: ""
             val photos = row?.get("photos")?.let { el -> runCatching { el.jsonArray.mapNotNull { it.jsonPrimitive.contentOrNull } }.getOrNull() }
             aboutLocal.set(AboutPage(
                 body = row?.get("body")?.jsonPrimitive?.contentOrNull,
                 photos = if (row == null) listOf(AboutPage.BUNDLED_PHOTO) else photos ?: emptyList(),
                 buttons = AboutLocal.sorted(btns.map { b -> AboutButton(b["id"]!!.jsonPrimitive.content, b["label"]?.jsonPrimitive?.contentOrNull ?: "",
                     b["kind"]?.jsonPrimitive?.contentOrNull ?: "link", b["value"]?.jsonPrimitive?.contentOrNull ?: "", b["sort"]?.jsonPrimitive?.intOrNull ?: 0) }),
-                updatedAt = Rows.ts(row?.get("updated_at")?.jsonPrimitive?.contentOrNull), fromServer = true, contactButton = contact))
+                updatedAt = Rows.ts(row?.get("updated_at")?.jsonPrimitive?.contentOrNull), fromServer = true, contactButton = contact, contactPhone = contactPhone))
         }.onFailure { android.util.Log.i("ALSIDDIQ_SELFTEST", "about: offline/unavailable -> showing the saved copy (${it.message})") }
     }
 

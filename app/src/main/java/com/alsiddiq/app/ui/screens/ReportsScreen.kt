@@ -112,7 +112,7 @@ fun ReportsScreen(user: Member, nav: NavHostController) {
             AppCard {
                 Text("توزيع التقديرات", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(10.dp))
-                DonutChart(Grade.entries.map { g -> Slice(g.label, recs.count { it.grade == g }.toFloat(), gradeColor(g)) }, centerText = "${recs.size}")
+                DonutChart(Grade.entries.map { g -> Slice(if (g == Grade.WEAK) "إعادة" else g.label, recs.count { it.grade == g }.toFloat(), gradeColor(g)) }, centerText = "${recs.size}")
             }
         }
         if (user.role != Role.VIEWER && false) {

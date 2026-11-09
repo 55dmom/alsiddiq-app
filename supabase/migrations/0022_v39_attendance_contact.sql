@@ -14,6 +14,7 @@ alter table public.teacher_attendance add constraint teacher_attendance_status_c
 create table if not exists public.centre_settings (
   center_id      uuid primary key references public.centers(id) on delete cascade,
   contact_button boolean not null default false,            -- «تواصل مع المركز»: off until the admin switches it on
+  contact_phone  text not null default '',                  -- the number the button dials (typed by the admin)
   updated_at     timestamptz not null default now()          -- the client sends it (no trigger in this schema)
 );
 alter table public.centre_settings enable row level security;

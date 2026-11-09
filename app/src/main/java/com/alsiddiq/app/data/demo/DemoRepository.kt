@@ -434,7 +434,7 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         val ids = marks.map { it.teacherId }.toSet()
         v38 = v38.copy(marks = v38.marks.filterNot { it.day == day && it.teacherId in ids } + marks.map { if (it.status == TeacherStatus.ABSENT) it.copy(checkIn = null, checkOut = null) else it }); saveV38(); marks.size
     }
-    override suspend fun saveContactButton(on: Boolean): Result<Unit> = runCatching { adminV38(); aboutLocal.set(aboutLocal.page.copy(contactButton = on)) }
+    override suspend fun saveContactButton(on: Boolean, phone: String): Result<Unit> = runCatching { adminV38(); aboutLocal.set(aboutLocal.page.copy(contactButton = on, contactPhone = phone.trim())) }
     override suspend fun budgetEntries(): Result<List<BudgetEntry>> = runCatching { adminV38(); v38.budget.sortedWith(compareByDescending<BudgetEntry> { it.day }.thenByDescending { it.createdAt }) }
     override suspend fun saveBudgetEntry(e: BudgetEntry, isNew: Boolean): Result<Unit> = runCatching {
         adminV38()

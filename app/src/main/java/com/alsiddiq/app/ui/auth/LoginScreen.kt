@@ -204,7 +204,8 @@ fun LoginScreen() {
         val gateContact = com.alsiddiq.app.ui.LocalContainer.current.center.about.collectAsState().value.contactButton
         if (gateContact) {
             Spacer(Modifier.height(10.dp))
-            Surface(onClick = { com.alsiddiq.app.ui.about.AboutActivity.start(gateCtx) }, shape = RoundedCornerShape(50), color = Brand.Card, shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+            val gateNum = com.alsiddiq.app.ui.about.dialable(com.alsiddiq.app.ui.LocalContainer.current.center.about.collectAsState().value.contactPhone)
+            Surface(onClick = { if (gateNum.isNotEmpty()) gateCtx.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$gateNum"))) else com.alsiddiq.app.ui.about.AboutActivity.start(gateCtx) }, shape = RoundedCornerShape(50), color = Brand.Card, shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(Icons.Outlined.Call, null, tint = Brand.Green, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                     Text("تواصل مع المركز", color = Brand.Navy, style = MaterialTheme.typography.labelLarge)

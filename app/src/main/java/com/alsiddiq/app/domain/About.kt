@@ -26,7 +26,9 @@ data class AboutPage(
     /** true once a copy came from the server (else: the bundled default or the offline copy). */
     val fromServer: Boolean = false,
     /** v3.9: the admin's switch «تواصل مع المركز» (off by default). On: the button shows for everyone and opens this page. */
-    val contactButton: Boolean = false
+    val contactButton: Boolean = false,
+    /** v3.9: the number the button dials (typed by the admin; any phone number). Empty = the button opens «عن المركز». */
+    val contactPhone: String = ""
 ) {
     companion object { const val BUNDLED_PHOTO = "bundled:about_photo_1" }
 }
