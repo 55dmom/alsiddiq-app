@@ -72,6 +72,7 @@ st 53_record_sard default --es demo_login admin --es route record/s1
 tapt "سرد السورة"; sleep 2; adb exec-out screencap -p > shots/53b_record_sard_selected.png
 adb shell input swipe 540 1500 540 900 400; sleep 1.5; adb exec-out screencap -p > shots/54_record_review_box.png
 tapt "لم يراجع"; sleep 1.5; adb exec-out screencap -p > shots/55_record_review_not_reviewed.png
+tapt "راجع من … إلى"; sleep 1.5; adb exec-out screencap -p > shots/56_record_review_range.png
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/record_layout.crash.txt; [ -s shots/record_layout.crash.txt ] || rm -f shots/record_layout.crash.txt
 ls -la shots
 exit 0
