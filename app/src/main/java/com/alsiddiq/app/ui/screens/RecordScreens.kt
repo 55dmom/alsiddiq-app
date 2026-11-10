@@ -86,7 +86,7 @@ private fun gradeTitle(kind: RecordKind): String = when (kind) {
     RecordKind.HIFZ -> "تقييم الحفظ"
     RecordKind.MURAJA -> "تقييم المراجعة"
     RecordKind.TASMEE -> "مراجعة وتسميع في نفس اليوم"
-    RecordKind.AZFAR -> "تقييم أظافر لم يسمع"
+    RecordKind.AZFAR -> "تقييم لم يسمع"
     RecordKind.SARD -> "تقييم سرد السورة"
 }
 
