@@ -159,7 +159,7 @@ fun RecordRow(r: Recitation, snap: CenterSnapshot, showStudent: Boolean, onDelet
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    when (r.kind) { RecordKind.HIFZ -> Icons.Outlined.AutoStories; RecordKind.TASMEE -> Icons.Outlined.RecordVoiceOver; RecordKind.MURAJA -> Icons.Outlined.Replay; RecordKind.AZFAR -> Icons.Outlined.Star },
+                    when (r.kind) { RecordKind.HIFZ -> Icons.Outlined.AutoStories; RecordKind.TASMEE -> Icons.Outlined.RecordVoiceOver; RecordKind.MURAJA -> Icons.Outlined.Replay; RecordKind.AZFAR -> Icons.Outlined.Star; RecordKind.SARD -> Icons.Outlined.MenuBook },
                     null, tint = kindColor(r.kind)
                 )
             }

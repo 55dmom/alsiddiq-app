@@ -87,7 +87,11 @@ private fun gradeTitle(kind: RecordKind): String = when (kind) {
     RecordKind.MURAJA -> "تقييم المراجعة"
     RecordKind.TASMEE -> "مراجعة وتسميع في نفس اليوم"
     RecordKind.AZFAR -> "تقييم أظافر لم يسمع"
+    RecordKind.SARD -> "تقييم سرد السورة"
 }
+
+/** build 15: the recording row. «سرد السورة» takes the place of «مراجعة»; the old value stays in history only. */
+private val RecordModes = listOf(RecordKind.HIFZ, RecordKind.TASMEE, RecordKind.SARD, RecordKind.AZFAR)
 
 /** One rating row: the five Arabic grades, verbatim. */
 @Composable
@@ -143,11 +147,23 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
     var pickFrom by remember { mutableStateOf(false) }
     var pickTo by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
+    // build 15: the مراجعة field (its own box, for any recording): null = not asked, true = راجع من … إلى, false = لم يراجع
+    var reviewed by remember { mutableStateOf<Boolean?>(null) }
+    var rFromSurah by remember { mutableIntStateOf(1) }
+    var rFromAyah by remember { mutableStateOf("1") }
+    var rToSurah by remember { mutableIntStateOf(1) }
+    var rToAyah by remember { mutableStateOf("1") }
+    var pickRFrom by remember { mutableStateOf(false) }
+    var pickRTo by remember { mutableStateOf(false) }
 
     val fa = fromAyah.toIntOrNull() ?: 0
     val ta = toAyah.toIntOrNull() ?: 0
     val ayat = Quran.ayatBetween(fromSurah, fa, toSurah, ta)
-    val valid = ayat > 0 && grade != null && !RestDay.isRest(LocalDate.now())   // v3.9: no recitation on Friday
+    val rfa = rFromAyah.toIntOrNull() ?: 0
+    val rta = rToAyah.toIntOrNull() ?: 0
+    val reviewRangeOk = Quran.isValid(rFromSurah, rfa) && Quran.isValid(rToSurah, rta) && Quran.ayatBetween(rFromSurah, rfa, rToSurah, rta) > 0
+    val reviewOk = reviewed != true || reviewRangeOk
+    val valid = ayat > 0 && grade != null && reviewOk && !RestDay.isRest(LocalDate.now())   // v3.9: no recitation on Friday
     val pages = if (ayat > 0) Quran.pagesOf(Quran.globalIndex(fromSurah, fa), Quran.globalIndex(toSurah, ta)) else 0.0
     val surahLabel: (Int) -> String = { n -> "$n. ${Quran.name(n)} (${Quran.ayahCount(n)})" }
 
@@ -159,7 +175,14 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
     fun save(goNext: Boolean) {
         val g = grade ?: return
         saving = true
-        val r = Recitation("", s.id, s.circleId, user.id, kind, fromSurah, fa, toSurah, ta, g, mistakes, notes.trim())
+        // build 15: until the record has its own column, the مراجعة line rides at the top of the note.
+        val reviewLine = when (reviewed) {
+            true -> "المراجعة: من ${Quran.name(rFromSurah)} ${rfa} إلى ${Quran.name(rToSurah)} ${rta}"
+            false -> "المراجعة: لم يراجع"
+            null -> null
+        }
+        val noteAll = listOfNotNull(reviewLine, notes.trim().ifEmpty { null }).joinToString("\n")
+        val r = Recitation("", s.id, s.circleId, user.id, kind, fromSurah, fa, toSurah, ta, g, mistakes, noteAll)
         actions.run("حُفظ: ${kind.label} $ayat آية — ${g.label}", { repo.logRecitation(r) }, onError = { saving = false }) {
             saving = false
             if (goNext && next != null) nav.navigate("record/${next.id}") { popUpTo("record/{sid}") { inclusive = true } }
@@ -189,10 +212,10 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
             Text("نوع التسجيل", style = MaterialTheme.typography.labelLarge, color = Brand.Muted)
             Spacer(Modifier.height(6.dp))
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                RecordKind.entries.forEachIndexed { i, k ->
+                RecordModes.forEachIndexed { i, k ->
                     SegmentedButton(
                         selected = kind == k, onClick = { kind = k },
-                        shape = SegmentedButtonDefaults.itemShape(i, RecordKind.entries.size),
+                        shape = SegmentedButtonDefaults.itemShape(i, RecordModes.size),
                         colors = SegmentedButtonDefaults.colors(activeContainerColor = kindColor(k).copy(alpha = 0.15f), activeContentColor = kindColor(k))
                     ) { Text(k.label) }
                 }
@@ -241,6 +264,39 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
                 }
             }
         }
+        item {
+            AppCard {
+                Text("مراجعة", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(8.dp))
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    listOf(true to "راجع من … إلى", false to "لم يراجع").forEachIndexed { i, (v, label) ->
+                        SegmentedButton(
+                            selected = reviewed == v, onClick = { reviewed = v },
+                            shape = SegmentedButtonDefaults.itemShape(i, 2)
+                        ) { Text(label) }
+                    }
+                }
+                if (reviewed == true) {
+                    Spacer(Modifier.height(10.dp))
+                    Text("من", style = MaterialTheme.typography.labelMedium, color = Brand.Muted)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SelectorField("السورة", Quran.name(rFromSurah), Modifier.weight(1.6f)) { pickRFrom = true }
+                        Spacer(Modifier.width(8.dp))
+                        Field(rFromAyah, { rFromAyah = it.filter { c -> c.isDigit() }.take(3) }, "الآية", Modifier.weight(1f), KeyboardType.Number)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("إلى", style = MaterialTheme.typography.labelMedium, color = Brand.Muted)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SelectorField("السورة", Quran.name(rToSurah), Modifier.weight(1.6f)) { pickRTo = true }
+                        Spacer(Modifier.width(8.dp))
+                        Field(rToAyah, { rToAyah = it.filter { c -> c.isDigit() }.take(3) }, "الآية", Modifier.weight(1f), KeyboardType.Number)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    if (!reviewRangeOk) Text("نهاية المراجعة قبل بدايتها أو رقم الآية غير صحيح", color = Brand.Red, style = MaterialTheme.typography.bodySmall)
+                    else Pill("${Quran.ayatBetween(rFromSurah, rfa, rToSurah, rta)} آية مراجعة", Brand.Maroon)
+                }
+            }
+        }
         if (kind != RecordKind.TASMEE) item { RecordGradeRow(gradeTitle(kind), grade) { grades[kind] = it } }
         item {
             AppCard(padding = 12.dp) {
@@ -277,4 +333,6 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
         if (toSurah < it) { toSurah = it; toAyah = Quran.ayahCount(it).coerceAtMost(5).toString() }
     }, { pickFrom = false }, searchable = true)
     if (pickTo) PickerDialog("سورة النهاية", (1..114).toList(), surahLabel, { toSurah = it; toAyah = Quran.ayahCount(it).toString() }, { pickTo = false }, searchable = true)
+    if (pickRFrom) PickerDialog("سورة بداية المراجعة", (1..114).toList(), surahLabel, { rFromSurah = it; rFromAyah = "1" }, { pickRFrom = false }, searchable = true)
+    if (pickRTo) PickerDialog("سورة نهاية المراجعة", (1..114).toList(), surahLabel, { rToSurah = it; rToAyah = Quran.ayahCount(it).toString() }, { pickRTo = false }, searchable = true)
 }

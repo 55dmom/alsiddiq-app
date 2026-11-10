@@ -63,6 +63,15 @@ adb shell input swipe 540 1500 540 700 400; adb shell input swipe 540 1500 540 7
 adb shell input swipe 540 700 540 1500 400; sleep 1
 tapt "أظافر لم يسمع"; sleep 2; adb exec-out screencap -p > shots/43_record_azfar.png
 adb shell input swipe 540 1500 540 700 400; sleep 1.5; adb exec-out screencap -p > shots/43b_record_azfar_grades.png
+# build 15 (v3.12): «سرد السورة» in the recording row (in place of «مراجعة»), the «مراجعة» field (من / إلى or لم يراجع),
+# and center reports for the admin and the teacher only (the general password gets the locked screen).
+st 50_reports_admin default --es demo_login admin --es route reports
+st 51_reports_teacher default --es demo_login teacher --es route reports
+st 52_reports_viewer default --es demo_login viewer --es route reports
+st 53_record_sard default --es demo_login admin --es route record/s1
+tapt "سرد السورة"; sleep 2; adb exec-out screencap -p > shots/53b_record_sard_selected.png
+adb shell input swipe 540 1500 540 900 400; sleep 1.5; adb exec-out screencap -p > shots/54_record_review_box.png
+tapt "لم يراجع"; sleep 1.5; adb exec-out screencap -p > shots/55_record_review_not_reviewed.png
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/record_layout.crash.txt; [ -s shots/record_layout.crash.txt ] || rm -f shots/record_layout.crash.txt
 ls -la shots
 exit 0

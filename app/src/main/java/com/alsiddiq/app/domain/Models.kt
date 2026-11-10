@@ -105,7 +105,8 @@ enum class RecordKind(val label: String, val short: String) {
     HIFZ("حفظ جديد", "حفظ"),
     TASMEE("تسميع", "تسميع"),
     MURAJA("مراجعة", "مراجعة"),
-    AZFAR("أظافر لم يسمع", "أظافر")   // build 14: appended last so existing stored values and list indexes stay put
+    AZFAR("أظافر لم يسمع", "أظافر"),   // build 14: appended last so existing stored values and list indexes stay put
+    SARD("سرد السورة", "سرد")          // build 15: appended last; shown in the recording row where «مراجعة» was (MURAJA stays for old records)
 }
 
 @Serializable

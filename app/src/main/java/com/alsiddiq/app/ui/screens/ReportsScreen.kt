@@ -49,6 +49,14 @@ import com.alsiddiq.app.ui.theme.Brand
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
+/** build 15: the general (viewer) password does not see center reports (his request, Nov 10). */
+@Composable
+fun CenterReportsLocked(nav: NavHostController) {
+    ScreenList("التقارير", onBack = { nav.popBackStack() }) {
+        item { EmptyState("تقارير المركز للإدارة والمعلمين فقط", "") }
+    }
+}
+
 @Composable
 fun ReportsScreen(user: Member, nav: NavHostController) {
     val snap = snapshot()

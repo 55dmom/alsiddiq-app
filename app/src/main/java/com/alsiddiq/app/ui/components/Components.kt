@@ -136,6 +136,7 @@ fun kindColor(k: RecordKind): Color = when (k) {
     RecordKind.TASMEE -> Brand.Gold
     RecordKind.MURAJA -> Brand.Maroon
     RecordKind.AZFAR -> Brand.Orange
+    RecordKind.SARD -> Brand.Green
 }
 
 fun attendanceColor(s: AttendanceStatus): Color = when (s) {

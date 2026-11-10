@@ -90,12 +90,7 @@ fun ViewerHome(user: Member, nav: NavHostController) {
                     StatTile("آيات الأسبوع", "${stats.ayatThisWeek}", Icons.Outlined.AutoStories, Brand.Navy, Modifier.weight(1f))
                     StatTile("حضور اليوم", if (stats.attendanceToday > 0) Fmt.pct(stats.attendanceToday) else "—", Icons.Outlined.FactCheck, Brand.Maroon, Modifier.weight(1f))
                 }
-                SectionHeader("التفاعل", "التقارير") { nav.navigate("reports") }
-                AppCard {
-                    Text("عدد السجلات يومياً — آخر 14 يوماً", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-                    Spacer(Modifier.height(10.dp))
-                    BarChart(stats.dailyRecords.map { (d, n) -> BarDatum(shortDayLabel(d) + " " + d.dayOfMonth, n.toFloat(), "$n سجل") })
-                }
+                // build 15: the «التقارير» chart is not on the general password's home (center reports are admin and teachers only).
                 SectionHeader("كم حفظ كل طالب", "كل الطلاب") { nav.navigate("students") }
             }
         }
