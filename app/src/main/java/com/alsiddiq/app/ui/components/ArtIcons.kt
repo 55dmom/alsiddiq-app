@@ -20,7 +20,7 @@ object ArtIcons {
         "تقرير اليوم" to R.drawable.art_reports, "التقارير والإحصائيات" to R.drawable.art_reports, "التقارير" to R.drawable.art_reports,
         "الإعلانات" to R.drawable.art_announcement, "التقارير والإعلانات" to R.drawable.art_announcement,
         "الإعدادات" to R.drawable.art_settings, "إعدادات المركز" to R.drawable.art_settings,
-        "الإدارة" to R.drawable.art_admin, "الأدوات" to R.drawable.art_tools, "المزيد" to R.drawable.art_more,
+        "الإدارة" to R.drawable.ic_admin_shield,   // build 15: the shield with the open book, in place of the key "الأدوات" to R.drawable.art_tools, "المزيد" to R.drawable.art_more,
         "الميزانية" to R.drawable.art_budget, "الاشتراكات الشهرية" to R.drawable.art_subscriptions,
         "المتفوقون" to R.drawable.art_honors, "المكافآت" to R.drawable.art_honors,
         "وسام الشرف لهذا الأسبوع" to R.drawable.art_weekly_star,

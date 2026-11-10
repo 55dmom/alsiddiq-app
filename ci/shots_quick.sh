@@ -73,6 +73,8 @@ tapt "سرد السورة"; sleep 2; adb exec-out screencap -p > shots/53b_recor
 adb shell input swipe 540 1500 540 900 400; sleep 1.5; adb exec-out screencap -p > shots/54_record_review_box.png
 tapt "لم يراجع"; sleep 1.5; adb exec-out screencap -p > shots/55_record_review_not_reviewed.png
 tapt "راجع من … إلى"; sleep 1.5; adb exec-out screencap -p > shots/56_record_review_range.png
+# build 15: the admin tile in the settings with the shield icon (the key is gone)
+st 57_settings_admin_shield default --es demo_login viewer --es route viewer_settings
 adb logcat -d -s AndroidRuntime:E | tail -40 > shots/record_layout.crash.txt; [ -s shots/record_layout.crash.txt ] || rm -f shots/record_layout.crash.txt
 ls -la shots
 exit 0

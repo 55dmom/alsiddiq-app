@@ -222,9 +222,9 @@ fun TasbeehScreen(onBack: (() -> Unit)? = null) {
                 .clickable { showOptions = true }.padding(horizontal = 18.dp, vertical = 9.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                 val c = Color.White.copy(alpha = 0.84f)
                 val sh = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), 8f))
-                for ((i, w) in listOf("الدورات", Cine.num(st.rounds), "|", "المجموع", Cine.num(st.total)).withIndex())
-                    if (w == "|") Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(12.dp).background(c.copy(alpha = 0.45f)))
-                    else Text(w, color = c, fontSize = 14.5.sp, fontWeight = if (i == 1 || i == 4) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, style = sh)
+                // build 15: the «الدورات» word (and its count) is gone from the pill; the total stays.
+                for ((i, w) in listOf("المجموع", Cine.num(st.total)).withIndex())
+                    Text(w, color = c, fontSize = 14.5.sp, fontWeight = if (i == 1) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, style = sh)
             }
         }
         if (showOptions) {
@@ -279,7 +279,7 @@ private fun TsbOptions(st: TasbeehState, select: (Int) -> Unit, onTarget: () -> 
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for ((title, n) in listOf("العدد" to st.count, "الدورات" to st.rounds, "المجموع" to st.total))
+            for ((title, n) in listOf("العدد" to st.count, "المجموع" to st.total))   // build 15: «الدورات» removed
                 Column(Modifier.weight(1f).height(62.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.07f)), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Text(Cine.num(n), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.65f))

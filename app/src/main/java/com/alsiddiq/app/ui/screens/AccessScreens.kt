@@ -302,15 +302,18 @@ fun TeacherEditScreen(user: Member, nav: NavHostController, id: String) {
             if (existing != null && existing.active) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = { askRemove = true }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand.Red)) { Text("إيقاف المعلم (تبقى سجلاته)") }
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Brand.Red)) { Text(if (user.role == Role.ADMIN) "مسح المعلم" else "إيقاف المعلم (تبقى سجلاته)") }   // build 15: the admin removes him directly
             }
         }
     }
     if (pick) PickerDialog("اختر الحلقة", listOf(Circle("", "بدون حلقة", null)) + snap.circles.sortedBy { it.name },
         { c -> c.name + (snap.member(c.teacherId)?.takeIf { it.id != existing?.id && c.id.isNotEmpty() }?.let { " — مع ${it.fullName}" } ?: "") },
         { circleId = it.id.ifEmpty { null } }, { pick = false })
-    if (askRemove && existing != null) ConfirmDialog("إيقاف ${existing.fullName}؟", "لن يستطيع الدخول بكلمة سره بعد الآن، وتبقى حلقته بدون معلم. سجلاته السابقة تبقى، وتقدر تشغّله لاحقاً بكلمة سر جديدة.", "إيقاف",
-        { actions.run("تم إيقاف المعلم", { repo.removeTeacher(existing.id) }) { nav.popBackStack() } }, { askRemove = false }, destructive = true)
+    if (askRemove && existing != null) ConfirmDialog(
+        if (user.role == Role.ADMIN) "مسح ${existing.fullName}؟" else "إيقاف ${existing.fullName}؟",
+        "لن يستطيع الدخول بكلمة سره بعد الآن، وتبقى حلقته بدون معلم. سجلاته السابقة تبقى باسمه، وتقدر تشغّله لاحقاً بكلمة سر جديدة.",
+        if (user.role == Role.ADMIN) "مسح" else "إيقاف",
+        { actions.run(if (user.role == Role.ADMIN) "تم مسح المعلم" else "تم إيقاف المعلم", { repo.removeTeacher(existing.id) }) { nav.popBackStack() } }, { askRemove = false }, destructive = true)
 }
 
 /** Admin: the general password and the admin password. (v3.3: each teacher's password is on his own page.) */

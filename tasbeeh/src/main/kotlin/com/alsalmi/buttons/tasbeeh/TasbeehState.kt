@@ -34,7 +34,8 @@ internal class TasbeehState(context: Context) {
         val saved = p.getString("counts", null)?.split(",")?.mapNotNull { it.toIntOrNull() }
         addAll(if (saved != null && saved.size == phrases.size) saved else List(phrases.size) { 0 })
     }
-    var target by mutableIntStateOf(p.getInt("target", 33).let { if (it > 0) it else 33 })
+    // build 15: the counter wraps at 33 (his request). A target saved before this build is not read until he saves one again.
+    var target by mutableIntStateOf(if (p.getBoolean("t33_v15", false)) p.getInt("target", 33).let { if (it > 0) it else 33 } else 33)
         private set
     var rounds by mutableIntStateOf(p.getInt("rounds", 0))
         private set
@@ -53,6 +54,7 @@ internal class TasbeehState(context: Context) {
             .putInt("sel", selected)
             .putString("counts", counts.joinToString(","))
             .putInt("target", target)
+            .putBoolean("t33_v15", true)
             .putInt("rounds", rounds)
             .putInt("total", total)
             .putBoolean("haptics", haptics)
