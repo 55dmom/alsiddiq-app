@@ -138,10 +138,32 @@ fun studentDashboard(scope: androidx.compose.foundation.lazy.LazyListScope, s: S
         }
         padItem(hPad) {
             val stats = remember(s, snap) { Stats.forStudent(s, snap) }
+            val ms = stats.monthlyScore
+            AppCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("الدرجات الشهرية", style = MaterialTheme.typography.titleSmall)
+                        Text("الهدف الشهري: ${Fmt.one(ms.monthlyJuzTarget)} جزء", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                    }
+                    Pill(ms.summaryText(), Brand.Maroon, filled = true)
+                }
+                Spacer(Modifier.height(10.dp))
+                LinearMeter((ms.totalScore / Stats.MAX_TOTAL_SCORE).toFloat().coerceIn(0f, 1f), Brand.Maroon)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MiniStat("الحفظ والسرد", "${ms.hifzRounded}/350", Modifier.weight(1f))
+                    MiniStat("المراجعة", "${ms.reviewRounded}/100", Modifier.weight(1f))
+                    MiniStat("الحضور", "${ms.attendanceRounded}/50", Modifier.weight(1f))
+                }
+            }
+        }
+        padItem(hPad) {
+            val stats = remember(s, snap) { Stats.forStudent(s, snap) }
+            val ms = stats.monthlyScore
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatTile("الحضور", if (stats.presentDays + stats.absentDays > 0) Fmt.pct(stats.attendanceRate) else "—", Icons.Outlined.EventAvailable, Brand.Green, Modifier.weight(1f), sub = "${stats.absentDays} غياب")
                 StatTile("متوسط التقدير", if (stats.averageGrade > 0) Fmt.one(stats.averageGrade) + "/5" else "—", Icons.Outlined.StarOutline, Brand.Gold, Modifier.weight(1f))
-                StatTile("النقاط", "${stats.points}", Icons.Outlined.EmojiEvents, Brand.Maroon, Modifier.weight(1f), onClick = { nav.navigate("rewards") })
+                StatTile("الدرجات", "${ms.totalRounded}/500", Icons.Outlined.EmojiEvents, Brand.Maroon, Modifier.weight(1f), sub = "${ms.percent}%", onClick = { nav.navigate("rewards") })
             }
         }
         padItem(hPad) {
@@ -168,6 +190,7 @@ fun studentDashboard(scope: androidx.compose.foundation.lazy.LazyListScope, s: S
             AppCard {
                 KeyValueRow("الحلقة", snap.circle(s.circleId)?.name ?: "—")
                 KeyValueRow("المعلم", snap.teacherOf(snap.circle(s.circleId)) ?: "—")
+                KeyValueRow("الهدف الشهري", "${Fmt.one(s.monthlyJuzTarget)} جزء")
                 KeyValueRow("تاريخ الالتحاق", runCatching { Fmt.date(LocalDate.parse(s.joinedOn)) }.getOrDefault(s.joinedOn))
                 if (s.birthYear != null) KeyValueRow("سنة الميلاد", "${s.birthYear}")
                 KeyValueRow("الحالة", if (s.active) s.status.label else "مفصول")
@@ -208,6 +231,7 @@ fun StudentEditScreen(user: Member, nav: NavHostController, id: String, presetCi
     var birth by remember { mutableStateOf(existing?.birthYear?.toString() ?: "") }
     var circleId by remember { mutableStateOf(existing?.circleId ?: presetCircle) }
     var goal by remember { mutableStateOf((existing?.goalJuz ?: 5).toString()) }
+    var monthlyTarget by remember { mutableStateOf(Fmt.one(existing?.monthlyJuzTarget ?: 1.0)) }
     var status by remember { mutableStateOf(existing?.status ?: StudentStatus.ACTIVE) }
     var notes by remember { mutableStateOf(existing?.notes ?: "") }
     var pickCircle by remember { mutableStateOf(false) }
@@ -222,8 +246,15 @@ fun StudentEditScreen(user: Member, nav: NavHostController, id: String, presetCi
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Field(birth, { birth = it.filter { c -> c.isDigit() }.take(4) }, "سنة الميلاد", Modifier.weight(1f), KeyboardType.Number)
-                    Field(goal, { goal = it.filter { c -> c.isDigit() }.take(2) }, "الهدف (أجزاء)", Modifier.weight(1f), KeyboardType.Number)
+                    Field(goal, { goal = it.filter { c -> c.isDigit() }.take(2) }, "الهدف الكلي (أجزاء)", Modifier.weight(1f), KeyboardType.Number)
                 }
+                Spacer(Modifier.height(10.dp))
+                Field(
+                    monthlyTarget,
+                    { v -> monthlyTarget = v.filter { c -> c.isDigit() || c == '.' }.take(5) },
+                    "الهدف الشهري (أجزاء) — الافتراضي 1 جزء",
+                    keyboard = KeyboardType.Decimal
+                )
                 Spacer(Modifier.height(10.dp))
                 SelectorField("الحلقة", snap.circle(circleId)?.name ?: "اختر الحلقة") { pickCircle = true }
                 Spacer(Modifier.height(12.dp))
@@ -237,9 +268,11 @@ fun StudentEditScreen(user: Member, nav: NavHostController, id: String, presetCi
         item {
             Button(
                 onClick = {
+                    val parsedMonthly = monthlyTarget.toDoubleOrNull()?.takeIf { it > 0.0 }?.coerceIn(0.25, 30.0) ?: 1.0
                     val st = (existing ?: Student("", "", circleId = null, joinedOn = LocalDate.now().toString())).copy(
                         fullName = name.trim(), phone = phone.filter { it.isDigit() }, birthYear = birth.toIntOrNull(),
-                        circleId = circleId, goalJuz = (goal.toIntOrNull() ?: 5).coerceIn(1, 30), status = status, notes = notes.trim()
+                        circleId = circleId, goalJuz = (goal.toIntOrNull() ?: 5).coerceIn(1, 30),
+                        monthlyJuzTarget = parsedMonthly, status = status, notes = notes.trim()
                     )
                     actions.run(if (existing == null) "تمت إضافة الطالب" else "تم الحفظ", { repo.saveStudent(st) }) { nav.popBackStack() }
                 },

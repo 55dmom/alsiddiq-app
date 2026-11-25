@@ -9,7 +9,7 @@ import kotlin.random.Random
 
 /** Sample data for design and testing only. Never used once the central database is connected. */
 object DemoSeed {
-    const val VERSION = 12
+    const val VERSION = 13
     /** Demo passwords (sample data only): general view, admin, and (v3.3) each teacher's own password. */
     const val VIEWER_PASSWORD = "111111"
     const val ADMIN_PASSWORD = "222222"
@@ -48,7 +48,8 @@ object DemoSeed {
                 id = "s${i + 1}", fullName = n, phone = "05000001%02d".format(i),
                 birthYear = 2008 + (i % 9), circleId = circle.id,
                 joinedOn = today.minusDays(40L + i * 9).toString(),
-                goalJuz = if (circle.id == "c3") 3 else if (circle.id == "c4") 30 else 10
+                goalJuz = if (circle.id == "c3") 3 else if (circle.id == "c4") 30 else 10,
+                monthlyJuzTarget = if (circle.id == "c3") 0.5 else if (circle.id == "c4") 2.0 else 1.0
             )
         }
         val members = listOf(admin, viewer, t1, t2, t3)
@@ -75,8 +76,25 @@ object DemoSeed {
                 val count = (if (circle.id == "c3") 2 else 4) + rnd.nextInt(5)
                 val toAyah = (ayah + count - 1).coerceAtMost(Quran.ayahCount(surah))
                 val grade = Grade.entries[listOf(0, 0, 0, 1, 1, 1, 2, 2, 3, 4)[rnd.nextInt(10)]]
-                recs += Recitation("r${seq++}", s.id, circle.id, circle.teacherId ?: tAcc.id, RecordKind.HIFZ,
-                    surah, ayah, surah, toAyah, grade, rnd.nextInt(4), "", at, byName = circle.teacherName)
+                val hasRev = rnd.nextInt(3) == 0
+                val recKind = when {
+                    back % 7 == 0 -> RecordKind.SARD
+                    back % 5 == 0 -> RecordKind.TASMEE
+                    else -> RecordKind.HIFZ
+                }
+                val revGrade = if (hasRev) Grade.entries[rnd.nextInt(3)] else null
+                val revMist = if (hasRev) rnd.nextInt(3) else 0
+                recs += Recitation(
+                    "r${seq++}", s.id, circle.id, circle.teacherId ?: tAcc.id, recKind,
+                    surah, ayah, surah, toAyah, grade, rnd.nextInt(4), "", at, byName = circle.teacherName,
+                    reviewMistakes = revMist,
+                    reviewStatus = if (hasRev) "reviewed" else null,
+                    reviewFromSurah = if (hasRev) surah else null,
+                    reviewFromAyah = if (hasRev) 1 else null,
+                    reviewToSurah = if (hasRev) surah else null,
+                    reviewToAyah = if (hasRev) toAyah else null,
+                    reviewGrade = revGrade
+                )
                 if (rnd.nextInt(3) == 0) {
                     val ms = surah
                     recs += Recitation("r${seq++}", s.id, circle.id, circle.teacherId ?: tAcc.id, RecordKind.MURAJA,

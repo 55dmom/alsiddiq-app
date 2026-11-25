@@ -48,7 +48,7 @@ private fun honorSince(i: Int, today: LocalDate = LocalDate.now()): LocalDate? =
 
 /** The key score of the report, in one line: «١٢٫٥ صفحة حفظ • تقدير ٤٫٦/٥ • حضور ٩٢٪». */
 fun honorScoreText(h: Stats.Honor): String =
-    Fmt.one(h.hifzPages) + " صفحة حفظ • تقدير " + Fmt.one(h.avgGrade) + "/5" + (if (h.attendance > 0f) " • حضور " + Fmt.pct(h.attendance) else "")
+    h.monthlyScore.summaryText() + " • " + Fmt.one(h.hifzPages) + " صفحة حفظ" + (if (h.attendance > 0f) " • حضور " + Fmt.pct(h.attendance) else "")
 
 /**
  * «المتفوقون»: ranked automatically from the same records as «التقارير» (new memorisation first, then grades and attendance).

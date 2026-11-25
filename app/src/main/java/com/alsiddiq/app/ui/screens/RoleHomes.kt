@@ -141,7 +141,7 @@ fun RewardsScreen(user: Member, nav: NavHostController, onBack: (() -> Unit)?) {
                         Text(s.fullName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         Text("$pts", style = MaterialTheme.typography.titleMedium, color = Brand.Maroon)
                         Spacer(Modifier.width(4.dp))
-                        Text("نقطة", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                        Text("درجة", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                     }
                 }
             }
@@ -173,7 +173,7 @@ fun RewardsScreen(user: Member, nav: NavHostController, onBack: (() -> Unit)?) {
             title = { Text("مكافأة لـ ${s.fullName}") },
             text = {
                 Column {
-                    Text("النقاط", style = MaterialTheme.typography.labelMedium, color = Brand.Muted)
+                    Text("الدرجات", style = MaterialTheme.typography.labelMedium, color = Brand.Muted)
                     val opts = listOf(5, 10, 15, 20, 50)
                     ChoiceChips(opts.map { "+$it" }, opts.indexOf(pts), { pts = opts[it] })
                     Spacer(Modifier.height(10.dp))

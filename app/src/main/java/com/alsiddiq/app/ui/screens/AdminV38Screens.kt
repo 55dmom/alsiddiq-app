@@ -130,7 +130,7 @@ fun TeacherAttendanceScreen(user: Member, nav: NavHostController) {
     val repo = LocalContainer.current.center
     val actions = rememberActions()
     if (user.role != Role.ADMIN) { ScreenList("حضور وغياب المعلمين", onBack = { nav.popBackStack() }) { item { EmptyState("للإدارة فقط", "") } }; return }
-    val teachers = snap.members.filter { it.role == Role.TEACHER && it.active && !it.allCircles }.sortedBy { it.fullName }
+    val teachers = snap.members.filter { it.role == Role.TEACHER && it.active && it.deletedAt == null && !it.allCircles }.sortedBy { it.fullName }
     val today = LocalDate.now()
     // Friday is a rest day: the sheet opens on the last record day (Thursday on a Friday) and skips Friday.
     var day by remember { mutableStateOf(RestDay.lastWorkDayOnOrBefore(today)) }

@@ -9,6 +9,7 @@ import java.time.OffsetDateTime
 internal object Rows {
     private fun JsonObject.s(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull
     private fun JsonObject.i(k: String): Int? = (this[k] as? JsonPrimitive)?.intOrNull
+    private fun JsonObject.d(k: String): Double? = (this[k] as? JsonPrimitive)?.doubleOrNull ?: s(k)?.toDoubleOrNull()
     private fun JsonObject.b(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanOrNull
     fun ts(v: String?): Long = v?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() } ?: 0L
     fun iso(ms: Long): String = Instant.ofEpochMilli(ms).toString()
@@ -21,7 +22,8 @@ internal object Rows {
     fun member(o: JsonObject) = Member(
         id = o.s("id")!!, fullName = o.s("full_name") ?: "", phone = o.s("phone") ?: "",
         role = enumOf(o.s("role"), Role.VIEWER), active = o.b("active") ?: true, createdAt = ts(o.s("created_at")),
-        allCircles = o.s("access_kind") == "teachers"
+        allCircles = o.s("access_kind") == "teachers",
+        deletedAt = o.s("deleted_at")?.let { ts(it) }
     )
 
     fun circle(o: JsonObject) = Circle(
@@ -41,6 +43,7 @@ internal object Rows {
     fun student(o: JsonObject) = Student(
         id = o.s("id")!!, fullName = o.s("full_name") ?: "", phone = o.s("phone") ?: "", birthYear = o.i("birth_year"),
         circleId = o.s("circle_id"), joinedOn = o.s("joined_on") ?: "", goalJuz = o.i("goal_juz") ?: 5,
+        monthlyJuzTarget = (o.d("monthly_juz_target") ?: 1.0).let { if (it > 0.0) it else 1.0 },
         status = enumOf(o.s("status"), StudentStatus.ACTIVE), notes = o.s("notes") ?: "", createdAt = ts(o.s("created_at")),
         photoPath = o.s("photo_path"),
         active = o.b("active") ?: true, dismissedAt = o.s("dismissed_at")?.let { ts(it) }, dismissedBy = o.s("dismissed_by")
@@ -71,7 +74,8 @@ internal object Rows {
     fun studentRow(s: Student, center: String) = buildJsonObject {
         put("id", s.id); put("center_id", center); put("full_name", s.fullName); put("phone", s.phone)
         put("birth_year", s.birthYear); put("circle_id", s.circleId); put("joined_on", s.joinedOn.ifBlank { java.time.LocalDate.now().toString() })
-        put("goal_juz", s.goalJuz); put("status", db(s.status)); put("notes", s.notes); put("updated_at", iso(System.currentTimeMillis()))
+        put("goal_juz", s.goalJuz); put("monthly_juz_target", if (s.monthlyJuzTarget > 0.0) s.monthlyJuzTarget.coerceIn(0.25, 30.0) else 1.0)
+        put("status", db(s.status)); put("notes", s.notes); put("updated_at", iso(System.currentTimeMillis()))
         put("photo_path", s.photoPath)
     }
 
@@ -79,13 +83,25 @@ internal object Rows {
         id = o.s("id")!!, studentId = o.s("student_id")!!, circleId = o.s("circle_id"), teacherId = o.s("teacher_id") ?: "",
         kind = enumOf(o.s("kind"), RecordKind.HIFZ), fromSurah = o.i("from_surah") ?: 1, fromAyah = o.i("from_ayah") ?: 1,
         toSurah = o.i("to_surah") ?: 1, toAyah = o.i("to_ayah") ?: 1, grade = enumOf(o.s("grade"), Grade.GOOD),
-        mistakes = o.i("mistakes") ?: 0, notes = o.s("notes") ?: "", recordedAt = ts(o.s("recorded_at")), byName = o.s("by_name")
+        mistakes = o.i("mistakes") ?: 0, notes = o.s("notes") ?: "", recordedAt = ts(o.s("recorded_at")), byName = o.s("by_name"),
+        reviewMistakes = o.i("review_mistakes") ?: 0,
+        reviewStatus = o.s("review_status"),
+        reviewFromSurah = o.i("review_from_surah"),
+        reviewFromAyah = o.i("review_from_ayah"),
+        reviewToSurah = o.i("review_to_surah"),
+        reviewToAyah = o.i("review_to_ayah"),
+        reviewGrade = o.s("review_grade")?.let { s -> Grade.entries.firstOrNull { it.name.equals(s, ignoreCase = true) } }
     )
     fun recitationRow(r: Recitation, center: String) = buildJsonObject {
         put("id", r.id); put("center_id", center); put("student_id", r.studentId); put("circle_id", r.circleId)
         put("teacher_id", r.teacherId); put("kind", db(r.kind)); put("from_surah", r.fromSurah); put("from_ayah", r.fromAyah)
         put("to_surah", r.toSurah); put("to_ayah", r.toAyah); put("grade", db(r.grade)); put("mistakes", r.mistakes)
         put("notes", r.notes); put("recorded_at", iso(r.recordedAt)); put("by_name", r.byName)
+        put("review_mistakes", r.reviewMistakes.coerceAtLeast(0))
+        put("review_status", r.reviewStatus)
+        put("review_from_surah", r.reviewFromSurah); put("review_from_ayah", r.reviewFromAyah)
+        put("review_to_surah", r.reviewToSurah); put("review_to_ayah", r.reviewToAyah)
+        put("review_grade", r.reviewGrade?.let { db(it) })
     }
 
     fun attendance(o: JsonObject) = Attendance(

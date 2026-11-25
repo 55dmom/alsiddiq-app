@@ -90,7 +90,8 @@ fun ViewerHome(user: Member, nav: NavHostController) {
                     StatTile("آيات الأسبوع", "${stats.ayatThisWeek}", Icons.Outlined.AutoStories, Brand.Navy, Modifier.weight(1f))
                     StatTile("حضور اليوم", if (stats.attendanceToday > 0) Fmt.pct(stats.attendanceToday) else "—", Icons.Outlined.FactCheck, Brand.Maroon, Modifier.weight(1f))
                 }
-                // build 15: the «التقارير» chart is not on the general password's home (center reports are admin and teachers only).
+                Spacer(Modifier.height(10.dp))
+                MenuRow("التقارير والسجلات والدرجات", "سجل كل الأيام السابقة، الحضور، والدرجات من 500", Icons.Outlined.Insights, Brand.Navy) { nav.navigate("reports") }
                 SectionHeader("كم حفظ كل طالب", "كل الطلاب") { nav.navigate("students") }
             }
         }
@@ -108,9 +109,9 @@ fun ViewerHome(user: Member, nav: NavHostController) {
                             LinearMeter((st.juzEquivalent / 30.0).toFloat().coerceIn(0f, 1f), Brand.Gold)
                         }
                         Spacer(Modifier.width(10.dp))
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(Fmt.one(st.juzEquivalent), style = MaterialTheme.typography.titleMedium, color = Brand.Navy)
-                            Text("جزء", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("${st.monthlyScore.totalRounded}/500", style = MaterialTheme.typography.titleSmall, color = Brand.Maroon)
+                            Text("${st.monthlyScore.percent}% • ${Fmt.one(st.juzEquivalent)} جزء", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
                         }
                     }
                 }
@@ -215,18 +216,21 @@ fun TeacherMoreScreen(user: Member, nav: NavHostController) {
         item { MenuRow("كل الحلقات", "عرض فقط: حلقات المعلمين الآخرين وطلابهم", Icons.Outlined.Groups) { nav.navigate("circles") } }
         item { MenuRow("التقارير والإحصائيات", "رسوم الحلقات", Icons.Outlined.Insights) { nav.navigate("reports") } }
         item { MenuRow("المتفوقون", "أعلى الطلاب حسب تقاريرهم", Icons.Outlined.EmojiEvents, Brand.Gold) { nav.navigate("honors") } }
-        item { MenuRow("المكافآت", "منح النقاط ولوحة الشرف", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
+        item { MenuRow("المكافآت", "منح الدرجات ولوحة الشرف", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
         item { MenuRow("الإعلانات", "إعلانات المركز", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
         item { MenuRow("عن التطبيق", "الإصدار وحالة المزامنة", Icons.Outlined.Info) { nav.navigate("about") } }
     }
 }
 
-/** Admin (v3.3): the teachers — each with his own password and his circle. */
+/** Admin (v3.3 + build 17): active teachers only; deleted teachers disappear completely from the list while circles & records stay intact. */
 @Composable
 fun TeachersScreen(user: Member, nav: NavHostController) {
     val snap = snapshot()
-    val list = snap.members.filter { it.role == Role.TEACHER && !it.allCircles }.sortedWith(compareBy({ !it.active }, { it.fullName }))
+    val actions = rememberActions()
+    val repo = LocalContainer.current.center
+    val list = snap.teachers().sortedBy { it.fullName }
+    var deleting by remember { mutableStateOf<Member?>(null) }
     ScreenList("المعلمون", onBack = { nav.popBackStack() }, fab = {
         if (Permissions.canManageMembers(user)) AddFab("معلم جديد") { nav.navigate("teacher_edit/new") }
     }) {
@@ -243,17 +247,33 @@ fun TeachersScreen(user: Member, nav: NavHostController) {
             val circles = snap.circlesOf(m.id)
             AppCard(onClick = { nav.navigate("teacher_edit/${m.id}") }, padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(m.fullName, color = if (m.active) Brand.Maroon else Brand.Muted)
+                    Avatar(m.fullName, color = Brand.Maroon)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(m.fullName, style = MaterialTheme.typography.titleSmall)
                         Text(circles.joinToString("، ") { "${it.name} (${ArabicText.students(snap.studentsIn(it.id).size)})" }.ifBlank { "بدون حلقة" },
                             style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (!m.active) Pill("موقوف", Brand.Red)
+                    if (Permissions.canManageMembers(user)) {
+                        IconButton(onClick = { deleting = m }) {
+                            Icon(Icons.Outlined.DeleteOutline, "مسح المعلم", tint = Brand.Red)
+                        }
+                    }
                 }
             }
         }
+    }
+    deleting?.let { target ->
+        ConfirmDialog(
+            "مسح ${target.fullName}؟",
+            "سيُزال المعلم نهائياً من قائمة المعلمين ولن يتمكن من الدخول بعد الآن، بينما تبقى الحلقات وجميع السجلات السابقة محفوظة.",
+            "مسح المعلم",
+            {
+                actions.run("تم مسح المعلم", { repo.removeTeacher(target.id) }) { deleting = null }
+            },
+            { deleting = null },
+            destructive = true
+        )
     }
 }
 
@@ -310,10 +330,10 @@ fun TeacherEditScreen(user: Member, nav: NavHostController, id: String) {
         { c -> c.name + (snap.member(c.teacherId)?.takeIf { it.id != existing?.id && c.id.isNotEmpty() }?.let { " — مع ${it.fullName}" } ?: "") },
         { circleId = it.id.ifEmpty { null } }, { pick = false })
     if (askRemove && existing != null) ConfirmDialog(
-        if (user.role == Role.ADMIN) "مسح ${existing.fullName}؟" else "إيقاف ${existing.fullName}؟",
-        "لن يستطيع الدخول بكلمة سره بعد الآن، وتبقى حلقته بدون معلم. سجلاته السابقة تبقى باسمه، وتقدر تشغّله لاحقاً بكلمة سر جديدة.",
-        if (user.role == Role.ADMIN) "مسح" else "إيقاف",
-        { actions.run(if (user.role == Role.ADMIN) "تم مسح المعلم" else "تم إيقاف المعلم", { repo.removeTeacher(existing.id) }) { nav.popBackStack() } }, { askRemove = false }, destructive = true)
+        "مسح ${existing.fullName}؟",
+        "سيُزال المعلم نهائياً من قائمة المعلمين ولن يستطيع الدخول بكلمة سره بعد الآن، بينما تبقى الحلقات وجميع السجلات السابقة محفوظة.",
+        "مسح المعلم",
+        { actions.run("تم مسح المعلم", { repo.removeTeacher(existing.id) }) { nav.popBackStack() } }, { askRemove = false }, destructive = true)
 }
 
 /** Admin: the general password and the admin password. (v3.3: each teacher's password is on his own page.) */

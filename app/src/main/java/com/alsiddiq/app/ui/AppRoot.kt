@@ -44,7 +44,8 @@ fun tabsFor(role: Role): List<TabItem> = when (role) {
         TabItem("home", "الرئيسية", Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
         TabItem("students", "الطلاب", Icons.Outlined.School, Icons.Filled.School),
         TabItem("circles", "الحلقات", Icons.Outlined.Groups, Icons.Filled.Groups),
-        // build 15: center reports are for the admin and the teachers only; the general password has no «التقارير» tab.
+        // build 17: all reports, records, attendance and grades for all past days are open read-only to العامة.
+        TabItem("reports", "التقارير", Icons.Outlined.Insights, Icons.Filled.Insights),
         TabItem("tools", "الأدوات", Icons.Outlined.GridView, Icons.Filled.GridView),
         TabItem("viewer_settings", "الإعدادات", Icons.Outlined.Settings, Icons.Filled.Settings)
     )
@@ -242,7 +243,7 @@ private fun AppNavHost(nav: NavHostController, user: Member) {
         }
         composable("circles") { CirclesScreen(user, nav) }
         composable("students") { StudentsScreen(user, nav, circleFilter = null) }
-        composable("reports") { if (user.role == Role.VIEWER) CenterReportsLocked(nav) else ReportsScreen(user, nav) }
+        composable("reports") { ReportsScreen(user, nav) }
         composable("more") { MoreScreen(user, nav) }
         composable("teacher_more") { TeacherMoreScreen(user, nav) }
         composable("viewer_settings") { ViewerSettingsScreen(user, nav) }

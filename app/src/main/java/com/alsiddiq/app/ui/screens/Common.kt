@@ -138,8 +138,8 @@ fun StudentRow(s: Student, snap: CenterSnapshot, onClick: () -> Unit, trailing: 
                     if (isPending(s.id)) { Spacer(Modifier.width(6.dp)); PendingChip() }
                 }
                 Text(
-                    (snap.circle(s.circleId)?.name ?: "بدون حلقة") + " • " + Fmt.one(stats.juzEquivalent) + " جزء",
-                    style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1
+                    (snap.circle(s.circleId)?.name ?: "بدون حلقة") + " • " + Fmt.one(stats.juzEquivalent) + " جزء • " + stats.monthlyScore.summaryText(),
+                    style = MaterialTheme.typography.bodySmall, color = Brand.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(6.dp))
                 LinearMeter(stats.goalProgress, Brand.Navy)
@@ -173,8 +173,20 @@ fun RecordRow(r: Recitation, snap: CenterSnapshot, showStudent: Boolean, onDelet
                     Stats.describeRange(r) + " • " + Stats.ayatOf(r) + " آية",
                     style = MaterialTheme.typography.bodySmall, color = Brand.Muted
                 )
-                Text(Fmt.relative(r.recordedAt) + (if (r.mistakes > 0) " • ${r.mistakes} أخطاء" else "") + (snap.recorder(r.byName, r.teacherId)?.let { " • $it" } ?: ""), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
-                if (r.notes.isNotBlank()) Text(r.notes, style = MaterialTheme.typography.bodySmall)
+                val errLabel = "أخطاء ${r.kind.short}: ${r.mistakes}"
+                Text(Fmt.relative(r.recordedAt) + (if (r.mistakes > 0) " • $errLabel" else "") + (snap.recorder(r.byName, r.teacherId)?.let { " • $it" } ?: ""), style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                if (r.reviewStatus == "reviewed") {
+                    val revDesc = Stats.describeReviewRange(r) ?: ""
+                    val revGradeTxt = r.reviewGrade?.let { " • ${it.label}" } ?: ""
+                    val revErrTxt = if (r.reviewMistakes > 0) " • أخطاء المراجعة: ${r.reviewMistakes}" else " • أخطاء المراجعة: 0"
+                    Text("المراجعة: $revDesc$revGradeTxt$revErrTxt", style = MaterialTheme.typography.labelSmall, color = Brand.Maroon)
+                } else if (r.reviewStatus == "not_reviewed") {
+                    Text("المراجعة: لم يراجع", style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                }
+                val cleanNotes = if (r.reviewStatus != null) {
+                    r.notes.lines().filterNot { it.startsWith("المراجعة:") }.joinToString("\n").trim()
+                } else r.notes.trim()
+                if (cleanNotes.isNotBlank()) Text(cleanNotes, style = MaterialTheme.typography.bodySmall)
                 if (isPending(r.id)) { Spacer(Modifier.height(4.dp)); PendingChip() }
             }
             Column(horizontalAlignment = Alignment.End) {

@@ -19,7 +19,9 @@ data class Member(
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     /** v3.1: the shared teachers' account — opens every circle. */
-    val allCircles: Boolean = false
+    val allCircles: Boolean = false,
+    /** build 17: full teacher removal timestamp; deleted teachers never appear in the teachers list. */
+    val deletedAt: Long? = null
 )
 
 /** v3.1: a teacher's NAME (no password). Picked when recording, shown in reports and on circles. */
@@ -63,6 +65,8 @@ data class Student(
     val circleId: String?,
     val joinedOn: String,
     val goalJuz: Int = 30,
+    /** build 17: per-student monthly juz target used for the 500-point grading system (default 1.0 juz). */
+    val monthlyJuzTarget: Double = 1.0,
     val status: StudentStatus = StudentStatus.ACTIVE,
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis(),
@@ -133,7 +137,15 @@ data class Recitation(
     val mistakes: Int = 0,
     val notes: String = "",
     val recordedAt: Long = System.currentTimeMillis(),
-    val byName: String? = null
+    val byName: String? = null,
+    /** build 17: independent optional مراجعة fields (separate error count, range, status, and grade). */
+    val reviewMistakes: Int = 0,
+    val reviewStatus: String? = null,
+    val reviewFromSurah: Int? = null,
+    val reviewFromAyah: Int? = null,
+    val reviewToSurah: Int? = null,
+    val reviewToAyah: Int? = null,
+    val reviewGrade: Grade? = null
 )
 
 @Serializable
@@ -226,12 +238,12 @@ data class CenterSnapshot(
     fun student(id: String?): Student? = students.firstOrNull { it.id == id } ?: dismissed.firstOrNull { it.id == id }
     fun studentsIn(circleId: String): List<Student> = students.filter { it.circleId == circleId }
     /** v3.1: teachers are names only (the admin's list). Old per-teacher accounts still count if there are no names. */
-    fun teachers(): List<Member> = members.filter { it.role == Role.TEACHER && it.active && !it.allCircles }
+    fun teachers(): List<Member> = members.filter { it.role == Role.TEACHER && it.active && it.deletedAt == null && !it.allCircles }
     fun activeTeacherNames(): List<TeacherName> = teacherNames.filter { it.active }.sortedBy { it.name }
-    fun teacherCount(): Int = activeTeacherNames().size.takeIf { it > 0 } ?: teachers().size
+    fun teacherCount(): Int = teachers().size.takeIf { it > 0 } ?: activeTeacherNames().size
     /** The teacher shown on a circle: its name, else the old account's name. */
     fun teacherOf(c: Circle?): String? =
-        c?.allTeacherIds()?.takeIf { it.size > 1 }?.mapNotNull { id -> member(id)?.takeIf { !it.allCircles && it.active }?.fullName }?.takeIf { it.isNotEmpty() }?.joinToString("، ")
+        c?.allTeacherIds()?.takeIf { it.size > 1 }?.mapNotNull { id -> member(id)?.takeIf { !it.allCircles && it.active && it.deletedAt == null }?.fullName }?.takeIf { it.isNotEmpty() }?.joinToString("، ")
             ?: c?.teacherName?.takeIf { it.isNotBlank() } ?: member(c?.teacherId)?.takeIf { !it.allCircles }?.fullName
     /** Who recorded something: the picked name, else the account's name. */
     fun recorder(byName: String?, accountId: String?): String? = byName?.takeIf { it.isNotBlank() } ?: member(accountId)?.fullName

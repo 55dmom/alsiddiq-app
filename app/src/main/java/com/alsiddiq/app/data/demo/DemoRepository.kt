@@ -211,9 +211,15 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
         val u = _user.value ?: return Result.failure(PermissionDenied())
         if (!Permissions.canManageMembers(u)) return Result.failure(PermissionDenied())
         val d0 = store.data
+        val now = System.currentTimeMillis()
         store = store.copy(data = d0.copy(
-            members = d0.members.map { if (it.id == id) it.copy(active = false) else it },
-            circles = d0.circles.map { if (it.teacherId == id) it.copy(teacherId = null, teacherName = null) else it }),
+            members = d0.members.map { if (it.id == id) it.copy(active = false, deletedAt = now) else it },
+            circles = d0.circles.map { c ->
+                val nextIds = c.teacherIds.filterNot { it == id }
+                if (c.teacherId == id) c.copy(teacherId = nextIds.firstOrNull(), teacherName = null, teacherIds = nextIds)
+                else if (id in c.teacherIds) c.copy(teacherIds = nextIds)
+                else c
+            }),
             passwordHashes = store.passwordHashes - id)
         persist(); _snapshot.value = visibleTo(u)
         Result.success(Unit)
@@ -340,9 +346,9 @@ class DemoRepository(private val context: Context) : AuthRepository, CenterRepos
     override suspend fun giveReward(r: Reward) = mutate { d, u ->
         val student = d.student(r.studentId) ?: throw ValidationError("الطالب غير موجود")
         require(Permissions.canRecordFor(u, student, d))
-        if (r.points == 0) throw ValidationError("حدّد عدد النقاط")
+        if (r.points == 0) throw ValidationError("حدّد عدد الدرجات")
         val saved = r.copy(id = r.id.ifBlank { newId() }, awardedBy = u.id, byName = r.byName ?: byName(u))
-        val notes = notify(d, recipientsFor(d, student.id), "مكافأة ${student.fullName} 🎉", "+${r.points} نقطة: ${r.reason}", "reward", saved.id)
+        val notes = notify(d, recipientsFor(d, student.id), "مكافأة ${student.fullName} 🎉", "+${r.points} درجة: ${r.reason}", "reward", saved.id)
         d.copy(rewards = d.rewards + saved, notifications = d.notifications + notes) to saved
     }
 

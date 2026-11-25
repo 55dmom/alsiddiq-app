@@ -200,7 +200,7 @@ fun MoreScreen(user: Member, nav: NavHostController) {
     ScreenList("الإدارة") {
         item { RoleStrip(user) }
         item { SectionHeader("المعلمون وكلمات السر") }
-        item { MenuRow("المعلمون", "${snap.activeTeacherNames().size} اسم • لمعرفة من سجّل", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teachers") } }
+        item { MenuRow("المعلمون", "${snap.teachers().size} معلم • الحلقات وكلمات السر", Icons.Outlined.CoPresent, Brand.Maroon) { nav.navigate("teachers") } }
         item { MenuRow("كلمات السر", "العامة والمعلمين والإدارة", Icons.Outlined.Password) { nav.navigate("passwords") } }
         item { SectionHeader("المظهر") }
         item { ThemesMenuItem() }
@@ -213,7 +213,7 @@ fun MoreScreen(user: Member, nav: NavHostController) {
         item { MenuRow("الاشتراكات الشهرية", "كشف كل حلقة: سلم أو لم يسلم، مع المبلغ", Icons.Outlined.Payments, Brand.Green) { nav.navigate("subscriptions") } }
         item { MenuRow("الميزانية", "الدخل والصرف والمتبقي • للإدارة فقط", Icons.Outlined.AccountBalanceWallet, Brand.Gold) { nav.navigate("budget") } }
         items(snap.circles.sortedBy { it.name }.take(6)) { c -> MenuRow("تقرير ${c.name}", "كم حفظوا ومن غاب", Icons.Outlined.Summarize, Brand.Gold) { nav.navigate("circle_report/${c.id}") } }
-        item { MenuRow("المكافآت والنقاط", "لوحة الشرف ومنح النقاط", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
+        item { MenuRow("المكافآت والدرجات", "لوحة الشرف ومنح الدرجات", Icons.Outlined.EmojiEvents) { nav.navigate("rewards") } }
         item { MenuRow("الإعلانات والتقارير", "${snap.announcements.size} منشور", Icons.Outlined.Campaign) { nav.navigate("announcements") } }
         item { MenuRow("الإشعارات", "${snap.notifications.count { !it.read }} غير مقروء", Icons.Outlined.Notifications) { nav.navigate("notifications") } }
         item { SectionHeader("المركز") }

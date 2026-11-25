@@ -797,8 +797,16 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         adminFunction(buildJsonObject { put("action", "teacher_remove"); put("id", id) })
         lock.withLock {
             val d = st.cache
-            st = st.copy(cache = d.copy(members = d.members.map { if (it.id == id) it.copy(active = false) else it },
-                circles = d.circles.map { if (it.teacherId == id) it.copy(teacherId = null, teacherName = null) else it })); save(); publish()
+            val now = System.currentTimeMillis()
+            st = st.copy(cache = d.copy(
+                members = d.members.map { if (it.id == id) it.copy(active = false, deletedAt = now) else it },
+                circles = d.circles.map { c ->
+                    val nextIds = c.teacherIds.filterNot { it == id }
+                    if (c.teacherId == id) c.copy(teacherId = nextIds.firstOrNull(), teacherName = null, teacherIds = nextIds)
+                    else if (id in c.teacherIds) c.copy(teacherIds = nextIds)
+                    else c
+                }
+            )); save(); publish()
         }
         runCatching { syncNow() }
         Result.success(Unit)
@@ -935,7 +943,7 @@ class CloudRepository(private val context: Context, url: String, publicKey: Stri
         val u = me(); val d = st.cache
         val student = d.student(r.studentId) ?: throw ValidationError("الطالب غير موجود")
         require(Permissions.canRecordFor(u, student, d))
-        if (r.points == 0) throw ValidationError("حدّد عدد النقاط")
+        if (r.points == 0) throw ValidationError("حدّد عدد الدرجات")
         val saved = r.copy(id = r.id.ifBlank { newId() }, awardedBy = u.id, byName = r.byName ?: byName())
         write(PendingOp(type = "upsert", table = "rewards", ignoreDuplicates = true, body = Rows.rewardRow(saved, center()).toString(), keys = listOf(saved.id), label = "مكافأة ${student.fullName}"), saved) {
             it.copy(rewards = listOf(saved) + it.rewards)

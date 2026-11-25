@@ -142,17 +142,21 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
     // v3.10 (build 13): each recording type keeps its own rating; the same-day row is the one under تسميع.
     val grades = remember { mutableStateMapOf<RecordKind, Grade>() }
     val grade = grades[kind]
-    var mistakes by remember { mutableIntStateOf(0) }
+    // build 17: independent error counter for each section (الحفظ الجديد / التسميع / سرد السورة / لم يسمع)
+    val mistakesByKind = remember { mutableStateMapOf<RecordKind, Int>() }
+    val mistakes = mistakesByKind[kind] ?: 0
     var notes by remember { mutableStateOf("") }
     var pickFrom by remember { mutableStateOf(false) }
     var pickTo by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
-    // build 15: the مراجعة field (its own box, for any recording): null = not asked, true = راجع من … إلى, false = لم يراجع
+    // build 15 + 17: optional مراجعة box with its OWN independent error counter & grade
     var reviewed by remember { mutableStateOf<Boolean?>(null) }
     var rFromSurah by remember { mutableIntStateOf(1) }
     var rFromAyah by remember { mutableStateOf("1") }
     var rToSurah by remember { mutableIntStateOf(1) }
     var rToAyah by remember { mutableStateOf("1") }
+    var reviewMistakes by remember { mutableIntStateOf(0) }
+    var reviewGrade by remember { mutableStateOf<Grade?>(null) }
     var pickRFrom by remember { mutableStateOf(false) }
     var pickRTo by remember { mutableStateOf(false) }
 
@@ -175,14 +179,34 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
     fun save(goNext: Boolean) {
         val g = grade ?: return
         saving = true
-        // build 15: until the record has its own column, the مراجعة line rides at the top of the note.
+        val effReviewGrade = if (reviewed == true) (reviewGrade ?: g) else null
+        val effReviewMistakes = if (reviewed == true) reviewMistakes else 0
+        val reviewStatusStr = when (reviewed) {
+            true -> "reviewed"
+            false -> "not_reviewed"
+            null -> null
+        }
+        // Keep human-readable summary line at top of note for older builds, while storing structured columns too.
         val reviewLine = when (reviewed) {
-            true -> "المراجعة: من ${Quran.name(rFromSurah)} ${rfa} إلى ${Quran.name(rToSurah)} ${rta}"
+            true -> "المراجعة: من ${Quran.name(rFromSurah)} ${rfa} إلى ${Quran.name(rToSurah)} ${rta}" +
+                (effReviewGrade?.let { " (${it.label})" } ?: "") +
+                (if (effReviewMistakes > 0) " • أخطاء المراجعة: $effReviewMistakes" else "")
             false -> "المراجعة: لم يراجع"
             null -> null
         }
         val noteAll = listOfNotNull(reviewLine, notes.trim().ifEmpty { null }).joinToString("\n")
-        val r = Recitation("", s.id, s.circleId, user.id, kind, fromSurah, fa, toSurah, ta, g, mistakes, noteAll)
+        val r = Recitation(
+            id = "", studentId = s.id, circleId = s.circleId, teacherId = user.id,
+            kind = kind, fromSurah = fromSurah, fromAyah = fa, toSurah = toSurah, toAyah = ta,
+            grade = g, mistakes = mistakes, notes = noteAll,
+            reviewMistakes = effReviewMistakes,
+            reviewStatus = reviewStatusStr,
+            reviewFromSurah = if (reviewed == true) rFromSurah else null,
+            reviewFromAyah = if (reviewed == true) rfa else null,
+            reviewToSurah = if (reviewed == true) rToSurah else null,
+            reviewToAyah = if (reviewed == true) rta else null,
+            reviewGrade = effReviewGrade
+        )
         actions.run("حُفظ: ${kind.label} $ayat آية — ${g.label}", { repo.logRecitation(r) }, onError = { saving = false }) {
             saving = false
             if (goNext && next != null) nav.navigate("record/${next.id}") { popUpTo("record/{sid}") { inclusive = true } }
@@ -294,17 +318,33 @@ fun RecordScreen(user: Member, nav: NavHostController, studentId: String) {
                     Spacer(Modifier.height(8.dp))
                     if (!reviewRangeOk) Text("نهاية المراجعة قبل بدايتها أو رقم الآية غير صحيح", color = Brand.Red, style = MaterialTheme.typography.bodySmall)
                     else Pill("${Quran.ayatBetween(rFromSurah, rfa, rToSurah, rta)} آية مراجعة", Brand.Maroon)
+                    Spacer(Modifier.height(10.dp))
+                    RecordGradeRow("تقييم المراجعة", reviewGrade) { reviewGrade = it }
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("أخطاء المراجعة", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        FilledTonalIconButton(onClick = { if (reviewMistakes > 0) reviewMistakes-- }) { Icon(Icons.Filled.Remove, "ناقص أخطاء المراجعة") }
+                        Text("$reviewMistakes", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 14.dp))
+                        FilledTonalIconButton(onClick = { reviewMistakes++ }) { Icon(Icons.Filled.Add, "زائد أخطاء المراجعة") }
+                    }
                 }
             }
         }
         if (kind != RecordKind.TASMEE) item { RecordGradeRow(gradeTitle(kind), grade) { grades[kind] = it } }
         item {
+            val sectionMistakesLabel = when (kind) {
+                RecordKind.HIFZ -> "أخطاء الحفظ الجديد"
+                RecordKind.TASMEE -> "أخطاء التسميع"
+                RecordKind.SARD -> "أخطاء سرد السورة"
+                RecordKind.MURAJA -> "أخطاء المراجعة"
+                RecordKind.AZFAR -> "أخطاء لم يسمع"
+            }
             AppCard(padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("عدد الأخطاء", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    FilledTonalIconButton(onClick = { if (mistakes > 0) mistakes-- }) { Icon(Icons.Filled.Remove, "ناقص") }
+                    Text(sectionMistakesLabel, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    FilledTonalIconButton(onClick = { if (mistakes > 0) mistakesByKind[kind] = mistakes - 1 }) { Icon(Icons.Filled.Remove, "ناقص") }
                     Text("$mistakes", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 14.dp))
-                    FilledTonalIconButton(onClick = { mistakes++ }) { Icon(Icons.Filled.Add, "زائد") }
+                    FilledTonalIconButton(onClick = { mistakesByKind[kind] = mistakes + 1 }) { Icon(Icons.Filled.Add, "زائد") }
                 }
                 Spacer(Modifier.height(8.dp))
                 Field(notes, { notes = it }, "ملاحظة للطالب وولي الأمر (اختياري)", singleLine = false, minLines = 2)
